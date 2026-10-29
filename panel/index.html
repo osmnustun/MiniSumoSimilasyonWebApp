@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Sumo 3D Simülatör</title>
+<style>
+:root{
+  --bg:#070a11; --panel:#0f1420; --panel2:#141b2b; --line:#1f2940;
+  --fg:#e8eef9; --muted:#7b8aa5; --accent:#00e0b0; --accent2:#00a886;
+  --blue:#3d8bfd; --red:#ff4d6d; --warn:#ffb020; --ok:#22c55e;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter','Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;
+  background-image:radial-gradient(900px 500px at 12% -10%,rgba(0,224,176,.10),transparent 60%),
+                   radial-gradient(700px 500px at 95% 110%,rgba(61,139,253,.08),transparent 60%);}
+.app{max-width:1620px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+  border-radius:16px;padding:14px 20px;margin-bottom:14px}
+.logo{font-size:1.3rem;font-weight:800;letter-spacing:-.5px}
+.logo span{color:var(--accent)}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:999px;
+  background:#0b111c;border:1px solid var(--line);font-size:.78rem;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.dot.live{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.dot.run{background:var(--accent);box-shadow:0 0 10px var(--accent)}
+.headerspace{flex:1}
+.clock{font-family:ui-monospace,monospace;font-size:1.05rem;font-weight:700;color:var(--accent)}
+.modesw{display:flex;gap:6px;background:#0b111c;border:1px solid var(--line);border-radius:12px;padding:4px}
+.modesw button{border:none;background:transparent;color:var(--muted);font-weight:700;font-size:.82rem;
+  padding:8px 16px;border-radius:9px;cursor:pointer;font-family:inherit}
+.modesw button.active{background:var(--accent);color:#03110d}
+
+.grid{display:grid;grid-template-columns:330px 1fr 340px;gap:14px}
+@media(max-width:1200px){.grid{grid-template-columns:1fr}}
+.card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+  border-radius:15px;padding:15px;margin-bottom:14px}
+.card h3{font-size:.7rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);
+  margin-bottom:13px;display:flex;align-items:center;gap:8px}
+.card h3::after{content:"";flex:1;height:1px;background:var(--line)}
+.hint{font-size:.76rem;color:var(--muted);line-height:1.5;margin-bottom:12px}
+
+.view{position:relative;background:#04070d;border:1px solid var(--line);border-radius:15px;
+  overflow:hidden;aspect-ratio:3/2}
+.view canvas{width:100%;height:100%;display:block}
+.view .badge{position:absolute;top:10px;left:10px;display:flex;gap:7px;flex-wrap:wrap}
+.view .b{background:rgba(6,10,18,.75);border:1px solid var(--line);border-radius:999px;
+  padding:5px 11px;font-size:.72rem;backdrop-filter:blur(6px)}
+.view .b.hint3d{left:auto;right:10px;position:absolute;top:10px}
+.countdown{position:absolute;inset:0;display:none;align-items:flex-start;justify-content:center;
+  padding-top:26px;font-size:3.4rem;font-weight:900;color:var(--accent);
+  text-shadow:0 0 30px rgba(0,224,176,.7), 0 0 6px rgba(0,0,0,.8);pointer-events:none}
+.countdown.show{display:flex}
+
+.lbl{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);margin-bottom:5px}
+.lbl b{color:var(--fg)}
+input[type=range]{-webkit-appearance:none;width:100%;height:6px;border-radius:3px;background:var(--line);
+  outline:none;margin:5px 0 12px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+  background:var(--accent);cursor:pointer;box-shadow:0 0 10px rgba(0,224,176,.5)}
+.dips{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
+.dipgroup{margin-top:12px}
+.dipgroup:first-of-type{margin-top:4px}
+.dipgroup-h{display:flex;justify-content:space-between;align-items:center;font-size:.8rem;
+  font-weight:700;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.grp-mavi{color:var(--blue)} .grp-kirmizi{color:var(--red)}
+.dip{background:#0b111c;border:2px solid var(--line);border-radius:12px;padding:12px 8px;
+  cursor:pointer;transition:.18s;user-select:none;display:flex;flex-direction:column;
+  align-items:center;gap:9px}
+.dip:hover{border-color:#39496a}
+.dip.on{border-color:var(--accent);background:rgba(0,224,176,.08)}
+.dip .n{font-size:.72rem;font-weight:700;letter-spacing:.5px;color:var(--muted)}
+.dip .track{width:40px;height:22px;border-radius:999px;background:#1a2233;position:relative;transition:.18s}
+.dip .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+  background:#5a6a86;transition:.18s}
+.dip.on .track{background:rgba(0,224,176,.28)}
+.dip.on .knob{left:20px;background:var(--accent);box-shadow:0 0 10px rgba(0,224,176,.6)}
+.dip .st{font-size:.68rem;font-weight:800;color:var(--muted)}
+.dip.on .st{color:var(--accent)}
+.btnrow{display:flex;gap:9px;flex-wrap:wrap;margin-top:4px}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  height:42px;padding:0 16px;border-radius:10px;cursor:pointer;border:1px solid transparent;
+  font-size:.84rem;font-weight:700;transition:.16s;font-family:inherit;
+  white-space:nowrap;line-height:1;box-sizing:border-box;flex:0 0 auto;
+}
+.btnrow>.btn{flex:1 1 0;min-width:0}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#03110d}
+.btn.primary:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,224,176,.32)}
+.btn.ghost{background:#0b111c;color:var(--fg);border:1px solid var(--line)}
+.btn.ghost:hover:not(:disabled){background:#141d2e;border-color:#39496a}
+.btn.red{background:linear-gradient(135deg,#ff4d6d,#d92e4c);color:#fff}
+.btn.red:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 20px rgba(255,77,109,.3)}
+.btn.blue{background:linear-gradient(135deg,#3d8bfd,#2563eb);color:#fff}
+.btn.blue:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 20px rgba(61,139,253,.3)}
+.btn.sm{height:36px;padding:0 13px;font-size:.79rem}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.pad .btn{min-width:0;height:40px;font-size:.78rem;padding:0 6px}
+.editortools>.btn,.editortools>label.btn{flex:0 0 auto}
+
+.team{border-radius:11px;padding:11px;margin-bottom:10px;background:#0b111c;border:1px solid var(--line)}
+.team.mavi{border-left:3px solid var(--blue)}
+.team.kirmizi{border-left:3px solid var(--red)}
+.team .th{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.team .th b{font-size:.88rem}
+.tag{font-size:.66rem;padding:2px 8px;border-radius:999px;background:#161f31;color:var(--muted)}
+.row{display:flex;justify-content:space-between;font-size:.79rem;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.row:last-child{border:none}
+.row span:first-child{color:var(--muted)}
+.mono{font-family:ui-monospace,monospace;color:var(--accent)}
+.bar{height:6px;background:#161f31;border-radius:3px;overflow:hidden;margin-top:5px}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--accent));width:0}
+.hit{color:var(--warn)!important}
+.big{font-size:1rem;font-weight:800}
+.badge-sensor{display:inline-block;font-size:.68rem;padding:2px 8px;border-radius:999px;background:#161f31;color:var(--muted)}
+.badge-sensor.on{background:rgba(255,176,32,.18);color:var(--warn)}
+.badge-sensor.white{background:rgba(34,197,94,.15);color:#7bf0a3}
+.badge-sensor.black{background:rgba(255,77,109,.15);color:#ff9db0}
+
+.editorwrap{display:flex;flex-direction:column}
+.tabs{display:flex;gap:8px;margin-bottom:11px}
+.tab{padding:8px 15px;border-radius:9px 9px 0 0;background:#0b111c;border:1px solid var(--line);
+  border-bottom:none;cursor:pointer;font-size:.8rem;font-weight:700;color:var(--muted)}
+.tab.active{background:var(--panel);color:var(--accent);border-color:var(--accent)}
+.editor{width:100%;height:300px;background:#060a12;color:#d6e4ff;border:1px solid var(--line);
+  border-radius:11px;padding:13px;font-family:ui-monospace,'Consolas',monospace;font-size:.8rem;
+  line-height:1.55;resize:vertical;tab-size:2;outline:none}
+.editor:focus{border-color:var(--accent)}
+.editortools{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:11px}
+.msg{font-size:.79rem;padding:9px 12px;border-radius:9px;margin-top:11px;display:none;white-space:pre-wrap}
+.msg.ok{display:block;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#7bf0a3}
+.msg.err{display:block;background:rgba(255,77,109,.12);border:1px solid rgba(255,77,109,.4);color:#ff9db0}
+select,input[type=text]{background:#0b111c;color:var(--fg);border:1px solid var(--line);border-radius:9px;
+  height:36px;padding:0 11px;font-family:inherit;font-size:.8rem;box-sizing:border-box}
+.pins{font-size:.73rem;color:var(--muted);line-height:1.9;font-family:ui-monospace,monospace}
+.pins b{color:var(--fg)}
+.hidden{display:none!important}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+
+/* ================= Çok istemcili oda / rol ================= */
+.rolepill b{color:var(--fg)}
+.rolepill.blue{border-color:rgba(61,139,253,.55)} .rolepill.blue b{color:var(--blue)}
+.rolepill.red{border-color:rgba(255,77,109,.55)}  .rolepill.red b{color:var(--red)}
+.rolepill.host{border-color:rgba(0,224,176,.55)}  .rolepill.host b{color:var(--accent)}
+
+.lobby{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  padding:22px;overflow:auto;background:
+    radial-gradient(900px 500px at 15% 0%,rgba(0,224,176,.13),transparent 60%),
+    radial-gradient(800px 500px at 90% 100%,rgba(61,139,253,.12),transparent 60%),
+    rgba(4,7,13,.97);backdrop-filter:blur(8px)}
+.lobby.hidden{display:none!important}
+.lobbycard{width:min(960px,100%);background:linear-gradient(180deg,#101726,#0b111c);
+  border:1px solid var(--line);border-radius:22px;padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.lobbycard h1{font-size:1.7rem;letter-spacing:-.6px;margin-bottom:6px}
+.lobbycard h1 span{color:var(--accent)}
+.lobbycard>.sub{color:var(--muted);font-size:.86rem;line-height:1.6;margin-bottom:20px}
+.lobbygrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:720px){.lobbygrid{grid-template-columns:1fr}}
+.lobbybox{background:#0b111c;border:1px solid var(--line);border-radius:16px;padding:18px}
+.lobbybox h3{font-size:.72rem;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);
+  margin-bottom:6px}
+.lobbybox .desc{font-size:.79rem;color:var(--muted);line-height:1.5;margin-bottom:12px}
+.lobbybox input{width:100%;height:42px;margin-bottom:10px}
+.lobbybox .btn{width:100%}
+.sidesel{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:2px 0 12px}
+.sidesel button{height:46px;border-radius:11px;border:1px solid var(--line);background:#0f1624;
+  color:var(--muted);font-family:inherit;font-weight:800;font-size:.85rem;cursor:pointer;transition:.16s}
+.sidesel button:hover{border-color:#39496a}
+.sidesel button.blue.active{border-color:var(--blue);color:var(--blue);background:rgba(61,139,253,.12)}
+.sidesel button.red.active{border-color:var(--red);color:var(--red);background:rgba(255,77,109,.12)}
+.lobbycode{font-family:ui-monospace,monospace;font-size:2.05rem;font-weight:800;letter-spacing:7px;
+  color:var(--accent);text-align:center;padding:12px;background:#060a12;border:1px dashed #2b3a58;
+  border-radius:12px;margin:6px 0 12px;user-select:all}
+.lobby .msg{margin-top:14px}
+
+/* DIP kilidi */
+.diplock{display:none;align-items:center;gap:8px;font-size:.76rem;line-height:1.45;
+  background:rgba(255,176,32,.10);border:1px solid rgba(255,176,32,.35);color:var(--warn);
+  border-radius:10px;padding:9px 11px;margin-bottom:10px}
+.diplock.show{display:flex}
+.diplock.open{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.35);color:#7bf0a3}
+.dip.locked{opacity:.42;cursor:not-allowed;filter:grayscale(.4)}
+.dip.readonly{opacity:.5;pointer-events:none}
+.dipgroup.readonly .dipgroup-h{opacity:.6}
+.dipgroup .you-tag{font-size:.62rem;padding:2px 7px;border-radius:999px;background:rgba(0,224,176,.15);
+  color:var(--accent);font-weight:800;margin-left:6px}
+
+/* Tur arası bandı */
+.breakbanner{position:absolute;left:50%;transform:translateX(-50%);top:12px;display:none;
+  align-items:center;gap:10px;padding:9px 16px;border-radius:999px;font-size:.82rem;font-weight:800;
+  background:rgba(0,224,176,.14);border:1px solid rgba(0,224,176,.5);color:var(--accent);
+  backdrop-filter:blur(8px);box-shadow:0 8px 30px rgba(0,224,176,.18);white-space:nowrap}
+.breakbanner.show{display:flex}
+.breakbanner b{font-family:ui-monospace,monospace;font-size:1rem}
+
+/* Oda / oyuncu kartı */
+.roomplayer{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.roomplayer:last-child{border:none}
+.roomplayer .who{flex:1;min-width:0}
+.roomplayer .who b{display:block;font-size:.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.roomplayer .who span{font-size:.68rem;color:var(--muted)}
+.roomplayer .st{font-size:.66rem;font-weight:800;padding:3px 8px;border-radius:999px;background:#161f31;color:var(--muted)}
+.roomplayer .st.ready{background:rgba(34,197,94,.16);color:#7bf0a3}
+.roomplayer .st.online{background:rgba(0,224,176,.14);color:var(--accent)}
+.roomplayer .st.offline{background:rgba(255,77,109,.13);color:#ff9db0}
+.roomplayer .side{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.roomplayer .side.blue{background:var(--blue);box-shadow:0 0 9px var(--blue)}
+.roomplayer .side.red{background:var(--red);box-shadow:0 0 9px var(--red)}
+.readyhint{font-size:.74rem;color:var(--muted);line-height:1.5;margin-top:9px}
+.spectator-note{font-size:.78rem;color:var(--muted);line-height:1.6;background:#0b111c;
+  border:1px solid var(--line);border-radius:10px;padding:11px}
+
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">🤖 Mini Sumo <span>3D</span></div>
+    <div class="modesw">
+      <button id="modeMatch" class="active">🏁 Maç</button>
+      <button id="modeTest">🧪 Eğitim / Test</button>
+    </div>
+    <div class="pill"><span class="dot" id="connDot"></span><span id="connTxt">Bağlanıyor…</span></div>
+    <div class="pill" id="roomPill">Oda <b id="roomCodeTxt" style="font-family:ui-monospace,monospace;color:var(--accent)">—</b></div>
+    <div class="pill rolepill" id="rolePill">Rol <b id="roleTxt">—</b></div>
+    <button class="btn ghost sm" id="leaveBtn" title="Odadan ayrıl">🚪 Çık</button>
+    <div class="headerspace"></div>
+    <div class="pill" id="clockPill">Süre <span class="clock" id="clock">0.0</span> sn</div>
+    <div class="pill" id="scorePill">🟦 <b id="score1" style="color:var(--blue)">0</b>
+      <span style="color:var(--muted)">:</span>
+      <b id="score2" style="color:var(--red)">0</b> 🟥
+      <span style="color:var(--muted)">·</span> Tur <b id="roundTxt" style="color:var(--fg)">1</b>/3</div>
+    <div class="pill" id="winnerPill">Kazanan <b id="winnerTxt" style="color:var(--fg)">—</b></div>
+  </header>
+
+  <div class="grid">
+
+    <!-- SOL -->
+    <div>
+      <!-- Oda / oyuncular -->
+      <div class="card" id="roomCard">
+        <h3>Oda / Oyuncular</h3>
+        <div id="roomPlayers"></div>
+        <div class="btnrow" id="readyRow" style="margin-top:10px">
+          <button class="btn primary sm" id="readyBtn">✅ Hazırım</button>
+        </div>
+        <div class="readyhint" id="roomHint"></div>
+      </div>
+
+      <!-- Paylaşılan: DIP Switch (her robot için 3'er adet) -->
+      <div class="card">
+        <h3>DIP Switch — Robot Başına (3×2)</h3>
+        <div class="hint">Her robotun kendi 3 adet 2-konumlu DIP switch'i var. Firmware <code>digitalRead</code> ile okur.
+          <b>Tur sırasında kilitlidir;</b> turlar arasında ve maç aralarında değiştirilebilir.</div>
+        <div class="diplock" id="dipLockMsg"></div>
+        <div class="dipgroup" id="dipGroup0">
+          <div class="dipgroup-h"><span class="grp-mavi">🟦 Mavi Robot <span class="you-tag hidden" id="youTag0">SİZ</span></span><span class="tag" id="dipTag0">000</span></div>
+          <div class="dips" id="dips0"></div>
+        </div>
+        <div class="dipgroup" id="dipGroup1">
+          <div class="dipgroup-h"><span class="grp-kirmizi">🟥 Kırmızı Robot <span class="you-tag hidden" id="youTag1">SİZ</span></span><span class="tag" id="dipTag1">000</span></div>
+          <div class="dips" id="dips1"></div>
+        </div>
+      </div>
+
+      <!-- MAÇ KONTROLLERİ -->
+      <div id="matchControls">
+        <div class="card">
+          <h3>Kontroller</h3>
+          <div class="lbl"><span>🏋️ Mavi robot ağırlığı</span><b id="w1v">500 g</b></div>
+          <input type="range" id="w1" min="100" max="500" value="500">
+          <div class="lbl"><span>🏋️ Kırmızı robot ağırlığı</span><b id="w2v">500 g</b></div>
+          <input type="range" id="w2" min="100" max="500" value="500">
+          <div class="btnrow"><button class="btn ghost" id="wApply">Ağırlıkları Uygula</button></div>
+        </div>
+        <div class="card">
+          <h3>Maç</h3>
+          <div class="btnrow">
+            <button class="btn primary" id="startBtn">▶ Maçı Başlat</button>
+            <button class="btn ghost" id="stopBtn" disabled>⏸ Durdur</button>
+            <button class="btn red" id="resetBtn">⟲ Sıfırla</button>
+          </div>
+          <div class="readyhint" id="playerMatchHint">Maçı hakem başlatır. Kodunuzu gönderip
+            <b>✅ Hazırım</b>'a basın; DIP switch'lerinizi turlar arasında değiştirebilirsiniz.</div>
+          <div class="msg" id="matchMsg"></div>
+        </div>
+      </div>
+
+      <!-- EĞİTİM / TEST KONTROLLERİ -->
+      <div id="testControls" class="hidden">
+        <div class="card">
+          <h3>🔧 Motor / Kod Testi</h3>
+          <div class="hint" id="testStateHint">Manuel mod: robotu elle sür. Kod test etmek için aşağıdaki editörden <b>Derle &amp; Test Et</b>'e bas.</div>
+          <div class="btnrow" style="margin-bottom:8px">
+            <button class="btn ghost sm" id="manualBtn">🕹️ Manuel Mod</button>
+            <span class="badge-sensor" id="testModeBadge" style="display:flex;align-items:center">MANUEL</span>
+          </div>
+          <div class="pad" id="drivePad">
+            <button class="btn ghost" data-drive="fw">▲ İleri</button>
+            <button class="btn ghost" data-drive="left">↺ Sol</button>
+            <button class="btn ghost" data-drive="right">↻ Sağ</button>
+            <button class="btn ghost" data-drive="tleft">◀ Yer.dön L</button>
+            <button class="btn red" data-drive="stop">■ Dur</button>
+            <button class="btn ghost" data-drive="tright">▶ Yer.dön R</button>
+            <button class="btn ghost" data-drive="back">▼ Geri</button>
+            <button class="btn ghost" data-drive="spin">◎ Kare dön</button>
+            <button class="btn ghost" data-drive="circle">◐ Daire</button>
+          </div>
+          <div style="margin-top:14px">
+            <div class="lbl"><span>Sol motor PWM</span><b id="mlv">0</b></div>
+            <input type="range" id="ml" min="-255" max="255" value="0">
+            <div class="lbl"><span>Sağ motor PWM</span><b id="mrv">0</b></div>
+            <input type="range" id="mr" min="-255" max="255" value="0">
+          </div>
+          <div class="btnrow">
+            <button class="btn primary sm" id="mApply">Motorları Uygula</button>
+            <button class="btn ghost sm" id="mStop">Durdur</button>
+          </div>
+          <div class="msg" id="testMsg"></div>
+        </div>
+
+        <div class="card">
+          <h3>📡 Sensör Testi</h3>
+          <div class="hint">Robotu ve hedefi dohyo üzerinde konumlandır; QTR (zemin) ve E3Z (rakip) sensörlerini gözle.</div>
+          <div class="lbl"><span>Robot X</span><b id="rxv">0.00</b></div>
+          <input type="range" id="rx" min="-35" max="35" value="0">
+          <div class="lbl"><span>Robot Y</span><b id="ryv">0.00</b></div>
+          <input type="range" id="ry" min="-35" max="35" value="0">
+          <div class="lbl"><span>Robot Yön (yaw)</span><b id="ryawv">0°</b></div>
+          <input type="range" id="ryaw" min="0" max="359" value="0">
+          <div class="btnrow">
+            <button class="btn ghost sm" id="placeCenter">Merkez</button>
+            <button class="btn ghost sm" id="placeEdge">Kenara</button>
+            <button class="btn blue sm" id="placeApply">Yerleştir</button>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
+          <div class="lbl"><span>Hedef X</span><b id="txv">0.15</b></div>
+          <input type="range" id="tx" min="-35" max="35" value="15">
+          <div class="lbl"><span>Hedef Y</span><b id="tyv">0.00</b></div>
+          <input type="range" id="ty" min="-35" max="35" value="0">
+          <div class="btnrow">
+            <button class="btn ghost sm" id="targetFront">Öne koy</button>
+            <button class="btn ghost sm" id="targetRight">Sağa</button>
+            <button class="btn ghost sm" id="targetHide">Kaldır</button>
+            <button class="btn blue sm" id="targetApply">Uygula</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ORTA: 3B GÖRÜNÜM + EDİTÖR -->
+    <div>
+      <div class="card" style="margin-bottom:14px">
+        <h3 id="viewTitle">Canlı 3D Saha — WebGL (GPU)</h3>
+        <div class="view">
+          <canvas id="gl"></canvas>
+          <div class="badge">
+            <span class="b" style="border-color:var(--blue)">● Mavi</span>
+            <span class="b" style="border-color:var(--red)">● Kırmızı</span>
+            <span class="b" id="fps">-- fps</span>
+          </div>
+          <div class="b hint3d">🖱️ Sürükle: döndür · Tekerlek: yakınlaş</div>
+          <div class="breakbanner" id="breakBanner">🔁 Tur arası — DIP değiştirilebilir · <b id="breakLeft">12</b> sn</div>
+          <div class="countdown" id="countdown">5</div>
+        </div>
+      </div>
+
+      <div class="card editorwrap" id="editorCard">
+        <h3>Kod Editörü — Arduino Nano (.ino)</h3>
+        <div class="tabs">
+          <div class="tab active" data-bot="1">🟦 Robot 1</div>
+          <div class="tab" data-bot="2">🟥 Robot 2</div>
+        </div>
+        <textarea class="editor" id="editor" spellcheck="false"></textarea>
+        <div class="editortools">
+          <select id="fileSel"><option value="">— Dosya —</option></select>
+          <input type="text" id="fileName" placeholder="dosya.ino" style="width:150px">
+          <button class="btn ghost sm" id="saveBtn">💾 Kaydet</button>
+          <button class="btn ghost sm" id="loadBtn">📂 Aç</button>
+          <label class="btn ghost sm" style="text-align:center;cursor:pointer">⬆ Yükle
+            <input type="file" id="fileInput" accept=".ino" hidden></label>
+          <button class="btn ghost sm" id="checkBtn">🔍 Derle</button>
+          <button class="btn primary sm" id="buildStart">⚡ Derle &amp; Başlat</button>
+        </div>
+        <div class="msg" id="codeMsg"></div>
+      </div>
+    </div>
+
+    <!-- SAĞ: TELEMETRİ -->
+    <div>
+      <div class="card">
+        <h3>Sensör / Telemetri</h3>
+        <div id="teams"></div>
+      </div>
+      <div class="card">
+        <h3>Donanım / Pin Haritası</h3>
+        <div class="pins" id="pins"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ================= ODA / GİRİŞ EKRANI ================= -->
+<div class="lobby hidden" id="lobby">
+  <div class="lobbycard">
+    <h1>🤖 Mini Sumo <span>Arena</span></h1>
+    <div class="sub">İki öğrenci kendi bilgisayarından aynı maça bağlanır. Hakem oda oluşturur,
+      oda kodunu paylaşır; oyuncular mavi/kırmızı tarafı seçip katılır. Herkes maçı canlı 3B izler,
+      her oyuncu kendi kodunu ve DIP switch'lerini yönetir.</div>
+    <div class="lobbygrid">
+      <div class="lobbybox">
+        <h3>Hakem / Öğretmen</h3>
+        <div class="desc">Odayı oluştur, kodu öğrencilerle paylaş, maçı başlat.</div>
+        <input type="text" id="hostName" placeholder="Adınız (örn. Öğretmen)" maxlength="40">
+        <button class="btn primary" id="createRoomBtn">🎓 Oda Oluştur</button>
+      </div>
+      <div class="lobbybox">
+        <h3>Öğrenci / Oyuncu</h3>
+        <div class="desc">Hakemin verdiği oda koduyla kendi tarafına katıl.</div>
+        <input type="text" id="joinCode" placeholder="Oda kodu (örn. K7M2PQ)" maxlength="8"
+               style="text-transform:uppercase;letter-spacing:3px;font-family:ui-monospace,monospace">
+        <input type="text" id="joinName" placeholder="Adınız" maxlength="40">
+        <div class="sidesel">
+          <button type="button" data-side="blue" class="blue">🟦 Mavi Taraf</button>
+          <button type="button" data-side="red" class="red">🟥 Kırmızı Taraf</button>
+        </div>
+        <button class="btn blue" id="joinRoomBtn">🚀 Odaya Katıl</button>
+      </div>
+    </div>
+    <div class="btnrow" style="margin-top:14px">
+      <button class="btn ghost sm" id="spectateBtn">👁️ Sadece izle</button>
+    </div>
+    <div class="msg" id="lobbyMsg"></div>
+  </div>
+</div>
+
+<script src="/static/three.min.js"></script>
+<script src="/static/OrbitControls.js"></script>
+<script>
+const API = location.origin;
+let dipStates = [[0,0,0],[0,0,0]];
+let currentBot = 1, mode = 'match';
+const code = {1:null, 2:null};
+const codeDirty = {1:false, 2:false};
+let lastMatchWinner = null;
+
+/* ===================== Çok istemcili oda durumu ===================== */
+let TOKEN = localStorage.getItem('sumo_token') || '';
+let ROOMINFO = null;
+let MY = {kind:'spectator', role:null, name:'İzleyici'};   // host | player | spectator
+let DIP_LOCKED = false;
+let READY = false;
+let stateCache = null;
+let entered = false;
+let joinSide = 'blue';
+let autoSaveT = null;
+let lastRoomPlayersSig = '';
+
+function api(path, opts){
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers || {});
+  if(TOKEN) opts.headers['X-Sumo-Token'] = TOKEN;
+  return fetch(API + path, opts);
+}
+function postJSON(path, body){
+  return api(path, {method:'POST', headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify(body || {})});
+}
+function isHost(){ return MY.kind === 'host'; }
+function isPlayer(){ return MY.kind === 'player'; }
+function isSpectator(){ return MY.kind === 'spectator'; }
+
+
+/* ===================== Three.js 3B Sahne ===================== */
+let scene, camera, renderer, controls, dohyoGroup;
+let robotMeshes = [];          // {group, wheelL, wheelR, color}
+let targetMesh = null;
+let cur = [];                  // hedef (interpolasyon) durumları
+let last = {};                 // önceki interpolasyon
+const RING_R = 0.385, EDGE_W = 0.025, WHITE_R = RING_R - EDGE_W;
+
+function init3D(){
+  const canvas = document.getElementById('gl');
+  renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x05080e);
+  scene.fog = new THREE.Fog(0x05080e, 2.2, 5.5);
+
+  // Yansımalı ortam haritası (metal yüzeyler için)
+  try{
+    const c=document.createElement('canvas'); c.width=512; c.height=256;
+    const cx=c.getContext('2d');
+    const grd=cx.createLinearGradient(0,0,0,256);
+    grd.addColorStop(0,'#9fb3d6'); grd.addColorStop(0.45,'#3a4660');
+    grd.addColorStop(0.55,'#1b2233'); grd.addColorStop(1,'#070a10');
+    cx.fillStyle=grd; cx.fillRect(0,0,512,256);
+    // parlak ışık noktası (stüdyo hissi)
+    const rg=cx.createRadialGradient(150,70,5,150,70,120);
+    rg.addColorStop(0,'rgba(255,255,255,0.95)'); rg.addColorStop(1,'rgba(255,255,255,0)');
+    cx.fillStyle=rg; cx.fillRect(0,0,512,256);
+    const tex=new THREE.CanvasTexture(c);
+    tex.mapping=THREE.EquirectangularReflectionMapping;
+    const pmrem=new THREE.PMREMGenerator(renderer);
+    scene.environment=pmrem.fromEquirectangular(tex).texture;
+  }catch(e){ /* env yoksa sorun değil */ }
+
+  camera = new THREE.PerspectiveCamera(42, 3/2, 0.02, 100);
+  camera.up.set(0, 0, 1);                 // Z-yukarı (PyBullet ile aynı)
+  camera.position.set(0.52, 0.60, 0.50);
+
+  controls = new THREE.OrbitControls(camera, canvas);
+  controls.target.set(0, 0, 0.03);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 0.3;
+  controls.maxDistance = 3;
+  controls.maxPolarAngle = Math.PI * 0.49;
+
+  // Işıklar
+  const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x131824, 0.45);
+  scene.add(hemi);
+  const key = new THREE.DirectionalLight(0xffffff, 2.4);
+  key.position.set(1.2, 1.6, 1.8);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  const s = 0.9;
+  key.shadow.camera.left=-s; key.shadow.camera.right=s;
+  key.shadow.camera.top=s; key.shadow.camera.bottom=-s;
+  key.shadow.camera.near=0.1; key.shadow.camera.far=6;
+  key.shadow.bias = -0.0008;
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0x88aaff, 0.45);
+  fill.position.set(-1.2, -0.8, 1.0); scene.add(fill);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.10));
+
+  buildDohyo();
+  buildEnvironment();
+
+  window.addEventListener('resize', onResize);
+  onResize();
+  animate();
+}
+
+function buildDohyo(){
+  dohyoGroup = new THREE.Group();
+
+  // Siyah taban
+  const baseGeo = new THREE.CylinderGeometry(RING_R, RING_R, 0.022, 96);
+  const baseMat = new THREE.MeshStandardMaterial({color:0x050506, roughness:1.0, metalness:0.0});
+  const base = new THREE.Mesh(baseGeo, baseMat);
+  base.rotation.x = Math.PI/2;      // ekseni Z'ye çevir
+  base.position.z = -0.011;
+  base.receiveShadow = true;
+  dohyoGroup.add(base);
+
+  // Beyaz üst yüzey
+  const topGeo = new THREE.CylinderGeometry(WHITE_R, WHITE_R, 0.024, 96);
+  const topMat = new THREE.MeshStandardMaterial({color:0xf2f4f6, roughness:0.55, metalness:0.02});
+  const top = new THREE.Mesh(topGeo, topMat);
+  top.rotation.x = Math.PI/2;
+  top.position.z = -0.0105;
+  top.receiveShadow = true;
+  dohyoGroup.add(top);
+
+  // Başlangıç çizgileri (iki beyaz çizgi, merkeze ±10 cm)
+  const lineMat = new THREE.MeshStandardMaterial({color:0xcfd8e3, roughness:0.6});
+  [-0.10, 0.10].forEach(x=>{
+    const g = new THREE.BoxGeometry(0.008, 0.12, 0.0015);
+    const m = new THREE.Mesh(g, lineMat);
+    m.position.set(x, 0, 0.0012);
+    dohyoGroup.add(m);
+  });
+
+  scene.add(dohyoGroup);
+}
+
+function buildEnvironment(){
+  // Zemin (gölge alıcı koyu zemin)
+  const g = new THREE.PlaneGeometry(12, 12);
+  const m = new THREE.MeshStandardMaterial({color:0x0b0f18, roughness:1.0, metalness:0});
+  const floor = new THREE.Mesh(g, m);
+  floor.rotation.x = Math.PI/2;
+  floor.position.z = -0.023;
+  floor.receiveShadow = true;
+  scene.add(floor);
+}
+
+function makeRobot(colorHex){
+  const group = new THREE.Group();
+  const accent = new THREE.Color(colorHex);
+
+  // Gerçek mini sumo robotu (Senju) esinli malzemeler
+  const bodyMat  = new THREE.MeshStandardMaterial({color:0x0a0b0f, roughness:0.88, metalness:0.06});
+  const bodyMat2 = new THREE.MeshStandardMaterial({color:0x171a20, roughness:0.7,  metalness:0.2});
+  const steelMat = new THREE.MeshStandardMaterial({color:0xc9ced6, roughness:0.24, metalness:1.0});
+  const pcbBlue  = new THREE.MeshStandardMaterial({color:0x1c4f8a, roughness:0.55, metalness:0.2});
+  const greenMat = new THREE.MeshStandardMaterial({color:0x1f9d55, roughness:0.6,  metalness:0.1});
+  const blackPl  = new THREE.MeshStandardMaterial({color:0x0a0b0e, roughness:0.9,  metalness:0.05});
+  const tireMat  = new THREE.MeshStandardMaterial({color:0x0a0b0e, roughness:0.95, metalness:0.0});
+  const hubMat   = new THREE.MeshStandardMaterial({color:0xd6dbe2, roughness:0.24, metalness:1.0});
+  const accentMat= new THREE.MeshStandardMaterial({color:colorHex, roughness:0.35, metalness:0.4,
+                     emissive:accent.clone().multiplyScalar(0.35)});
+  const ledMat   = new THREE.MeshStandardMaterial({color:0xffffff, emissive:accent.clone(),
+                     emissiveIntensity:2.6, roughness:0.3});
+  const eyeMat   = new THREE.MeshStandardMaterial({color:0xfff2a8, emissive:0xffcf2a, emissiveIntensity:1.8, roughness:0.3});
+  const irMat    = new THREE.MeshStandardMaterial({color:0x330a0a, emissive:0x661414, emissiveIntensity:0.7, roughness:0.5});
+
+  // --- Gövde: yan silueti extrude (önü alçak, arkaya doğru yükselen) ---
+  const s = new THREE.Shape();
+  s.moveTo(-0.046, 0.000);
+  s.lineTo( 0.046, 0.000);
+  s.lineTo( 0.046, 0.016);
+  s.lineTo( 0.012, 0.050);
+  s.lineTo(-0.018, 0.053);
+  s.lineTo(-0.046, 0.053);
+  s.lineTo(-0.046, 0.000);
+  const body = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(s, {depth:0.068, bevelEnabled:true,
+      bevelThickness:0.0016, bevelSize:0.0016, bevelSegments:2}), bodyMat);
+  body.rotation.x = Math.PI/2;          // profil (x,z) → dünya; extrude genişlik
+  body.position.set(0, 0.034, -0.024);  // taban z=-0.024, genişlik ortalanmış
+  body.castShadow = true; body.receiveShadow = true;
+  group.add(body);
+
+  // --- Ön çelik bıçak (plow) — dikeye yakın eğimli, yere değer ---
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.100, 0.0032), steelMat);
+  blade.rotation.y = -Math.PI * 0.38;
+  blade.position.set(0.054, 0, -0.008);
+  blade.castShadow = true;
+  group.add(blade);
+  // bıçak üst dudağı (yataya yakın)
+  const bladeTop = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.100, 0.0032), steelMat);
+  bladeTop.rotation.y = -Math.PI * 0.07;
+  bladeTop.position.set(0.041, 0, -0.021);
+  bladeTop.castShadow = true;
+  group.add(bladeTop);
+
+  // --- Üstte açık elektronik (PCB) ---
+  const pcb = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.056, 0.004), pcbBlue);
+  pcb.position.set(-0.020, 0, 0.026); pcb.castShadow = true; pcb.receiveShadow = true;
+  group.add(pcb);
+  // yeşil klemens blokları
+  [0.016, 0.002, -0.012].forEach((yy)=>{
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.009, 0.009), greenMat);
+    t.position.set(0.000, yy, 0.030); group.add(t);
+  });
+  // USB konektör (gümüş)
+  const usb = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.008, 0.005), steelMat);
+  usb.position.set(-0.030, 0.014, 0.030); group.add(usb);
+  // header pinler
+  const hdr = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.006, 0.007), blackPl);
+  hdr.position.set(-0.030, -0.014, 0.031); group.add(hdr);
+  // kondansatör
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.004,0.004,0.009,14),
+                             new THREE.MeshStandardMaterial({color:0x2a2f38, roughness:0.5, metalness:0.6}));
+  cap.position.set(-0.008, 0.018, 0.030); group.add(cap);
+
+  // --- Takım rengi LED şerit (arka kenar) ---
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.004, 0.0022), ledMat);
+  strip.position.set(-0.014, 0, 0.0525);
+  group.add(strip);
+
+  // --- Yan aksan şeridi (takım rengi) ---
+  [0.0345, -0.0345].forEach(y=>{
+    const side = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.002, 0.014), accentMat);
+    side.position.set(-0.008, y, 0.012); group.add(side);
+  });
+
+  // --- Vidalar ---
+  [[0.030,0.030],[-0.030,0.030],[0.030,-0.030],[-0.030,-0.030]].forEach(([x,y])=>{
+    const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.0022,0.0022,0.005,10), steelMat);
+    sc.position.set(x, y, 0.030); group.add(sc);
+  });
+
+  // --- Tekerlekler: siyah lastik + gümüş disk jant ---
+  function wheel(x, y){
+    const g = new THREE.Group();
+    const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.021,0.021,0.014,32), tireMat);
+    tire.castShadow = true; g.add(tire);
+    [0.0071, -0.0071].forEach(dy=>{
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.0148,0.0148,0.0016,30), hubMat);
+      disc.position.y = dy; g.add(disc);
+      const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.0016,0.0016,0.0020,10), blackPl);
+      hole.position.set(0.006, dy, 0.0); hole.rotation.x = Math.PI/2; g.add(hole);
+    });
+    g.position.set(x, y, -0.008);
+    group.add(g);
+    return g;
+  }
+  const wl = wheel(-0.018, 0.038);
+  const wr = wheel(-0.018, -0.038);
+
+  // --- Ön E3Z sensör modülü (bıçağın üstünde) ---
+  [0.021, -0.021].forEach(y=>{
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.010, 0.010), blackPl);
+    b.position.set(0.032, y, 0.013); b.castShadow = true; group.add(b);
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.0042,0.0042,0.0035,14), steelMat);
+    ring.rotation.z = Math.PI/2; ring.position.set(0.040, y, 0.013); group.add(ring);
+    const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.0026,0.0026,0.0042,14), eyeMat);
+    eye.rotation.z = Math.PI/2; eye.position.set(0.0415, y, 0.013); group.add(eye);
+  });
+
+  // --- Alt QTR sensörler (kızıl IR) ---
+  [0.024, -0.024].forEach(y=>{
+    const q = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.010, 0.004), blackPl);
+    q.position.set(0.030, y, -0.020); group.add(q);
+    const ir = new THREE.Mesh(new THREE.SphereGeometry(0.0022,10,8), irMat);
+    ir.position.set(0.030, y, -0.0218); group.add(ir);
+  });
+
+  // --- Kızak (bilye) ---
+  const skid = new THREE.Mesh(new THREE.SphereGeometry(0.006,18,14), steelMat);
+  skid.position.set(0.038, 0, -0.0245); skid.castShadow = true;
+  group.add(skid);
+
+  // --- Zemine takım rengi ışık halkası ---
+  const ringMat = new THREE.MeshBasicMaterial({color:colorHex, transparent:true, opacity:0.35,
+                    side:THREE.DoubleSide, blending:THREE.AdditiveBlending, depthWrite:false});
+  const glow = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.063, 40), ringMat);
+  glow.rotation.x = Math.PI/2;
+  glow.position.z = -0.0293;
+  group.add(glow);
+
+  return {group, wheelL: wl, wheelR: wr};
+}
+
+function ensureRobots(n, colors){
+  while (robotMeshes.length < n){
+    const i = robotMeshes.length;
+    const hex = parseInt((colors[i]||'#3d8bfd').replace('#',''), 16);
+    const r = makeRobot(hex);
+    scene.add(r.group);
+    robotMeshes.push(r);
+  }
+  // fazla olanları gizle
+  robotMeshes.forEach((r,i)=> r.group.visible = i < n);
+}
+
+function ensureTarget(visible){
+  if (!targetMesh){
+    const g = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.092,0.072,0.02),
+      new THREE.MeshStandardMaterial({color:0x2a0f14, roughness:0.6, metalness:0.4}));
+    base.castShadow = true; base.receiveShadow = true; g.add(base);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.07,0.05,0.006),
+      new THREE.MeshStandardMaterial({color:0xd23a4a, roughness:0.35, metalness:0.4,
+        emissive:0x5a0e18, emissiveIntensity:0.8}));
+    top.position.z = 0.012; top.castShadow = true; g.add(top);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.06,0.004,0.002),
+      new THREE.MeshStandardMaterial({color:0xffffff, emissive:0xff4d6d, emissiveIntensity:2.0}));
+    strip.position.z = 0.016; g.add(strip);
+    targetMesh = g;
+    scene.add(targetMesh);
+  }
+  targetMesh.visible = visible;
+}
+
+function rgbStr(c){ return 'rgb('+Math.round(c[0]*255)+','+Math.round(c[1]*255)+','+Math.round(c[2]*255)+')'; }
+
+/* ===================== Ana döngü (interpolasyon) ===================== */
+function animate(){
+  requestAnimationFrame(animate);
+  const t = performance.now();
+
+  robotMeshes.forEach((r,i)=>{
+    const c = cur[i];
+    if (!c) return;
+    const p = last[i] || {x:c.pos3[0], y:c.pos3[1], z:c.pos3[2], q:c.quat.slice()};
+    // yumuşatma
+    const k = 0.35;
+    p.x += (c.pos3[0]-p.x)*k; p.y += (c.pos3[1]-p.y)*k; p.z += (c.pos3[2]-p.z)*k;
+    // quaternion slerp
+    const qa = new THREE.Quaternion(p.q[0],p.q[1],p.q[2],p.q[3]);
+    const qb = new THREE.Quaternion(c.quat[0],c.quat[1],c.quat[2],c.quat[3]);
+    qa.slerp(qb, k);
+    last[i] = {x:p.x,y:p.y,z:p.z,q:[qa.x,qa.y,qa.z,qa.w]};
+    r.group.position.set(p.x, p.y, p.z);
+    r.group.quaternion.copy(qa);
+    if (r.wheelL) r.wheelL.rotation.y = -c.wheel_l;
+    if (r.wheelR) r.wheelR.rotation.y = -c.wheel_r;
+    // kenar dışı ise hafif şeffaf
+    r.group.traverse(o=>{ if(o.material) o.material.transparent=false; });
+  });
+
+  if (targetMesh && targetMesh.visible && lastTarget){
+    const k=0.35;
+    targetMesh.position.lerp(new THREE.Vector3(lastTarget[0], lastTarget[1], 0.015), k);
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+
+  // fps
+  fpsCount++;
+  if (t - fpsT > 1000){ document.getElementById('fps').textContent = fpsCount+' fps'; fpsCount=0; fpsT=t; }
+}
+let fpsCount=0, fpsT=performance.now(), lastTarget=null;
+
+function onResize(){
+  const c = document.getElementById('gl');
+  const w = c.clientWidth, h = c.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+
+/* ===================== Durum güncelleme ===================== */
+function applyState(s){
+  const rs = s.robots||[];
+  cur = rs.map(r=>({pos3:r.pos3, quat:r.quat, wheel_l:r.wheel_l, wheel_r:r.wheel_r}));
+  const colors = rs.map(r => r.color ? rgbToHex(r.color) : '#3d8bfd');
+  ensureRobots(rs.length, colors);
+  ensureTarget(s.target !== null && s.target !== undefined && rs.length===1);
+  if (s.target) lastTarget = s.target;
+  renderTeams(rs, s);
+}
+function rgbToHex(c){
+  const f=x=>('0'+Math.round(x*255).toString(16)).slice(-2);
+  return '#'+f(c[0])+f(c[1])+f(c[2]);
+}
+
+/* ===================== Yardımcılar ===================== */
+function flash(id,txt,cls){ const el=document.getElementById(id); el.className='msg '+cls; el.textContent=txt;
+  if(cls==='ok') setTimeout(()=>{el.className='msg';},2500); }
+
+/* DIP (robot başına 3 switch) — rol ve tur kilidi kontrollü */
+const dipLockT = [0,0];   // kısa süreli iyimser güncelleme koruması
+let dipNoticeUntil = 0;
+function canEditDip(robot){
+  if(isSpectator()) return false;
+  if(DIP_LOCKED) return false;
+  if(isHost()) return true;
+  // Eğitim laboratuvarında tek (mavi) test robotu vardır; iki öğrenci de kullanır.
+  if(mode === 'test') return robot === 0;
+  return robot === MY.role;
+}
+function buildDips(robot){
+  const el=document.getElementById('dips'+robot); if(!el) return;
+  el.innerHTML='';
+  const editable=canEditDip(robot);
+  for(let i=0;i<3;i++){
+    const on = !!dipStates[robot][i];
+    const d=document.createElement('div');
+    d.className='dip'+(on?' on':'')+(editable?'':(DIP_LOCKED?' locked':' readonly'));
+    d.innerHTML=`
+      <div class="n">DIP ${i+1}</div>
+      <div class="track"><div class="knob"></div></div>
+      <div class="st">${on?'ON · AKTİF':'OFF'}</div>`;
+    d.onclick=()=>{
+      if(!editable){
+        if(DIP_LOCKED) setDipNotice('🔒 DIP switch\'ler tur sırasında kilitli. Turlar arasında değiştirebilirsiniz.','lock');
+        else setDipNotice('Bu robotun DIP switch\'lerini yalnızca sahibi değiştirebilir.','lock');
+        return;
+      }
+      dipStates[robot][i]^=1; pushDip(robot);
+    };
+    el.appendChild(d);
+  }
+  const tag=document.getElementById('dipTag'+robot);
+  if(tag) tag.textContent = dipStates[robot].join('');
+}
+async function pushDip(robot){
+  buildDips(robot);
+  dipLockT[robot]=Date.now()+800;
+  try{
+    const r=await postJSON('/api/dip',{switches:dipStates[robot], robot});
+    const d=await r.json();
+    if(!d.ok){
+      if(d.dips){
+        const v=d.dips[robot]||0;
+        dipStates[robot]=[v&1,(v>>1)&1,(v>>2)&1];
+      }
+      buildDips(robot);
+      setDipNotice('🔒 '+(d.error||'DIP değiştirilemedi'),'lock');
+      return;
+    }
+    if(d.dips){
+      const v=d.dips[robot]||0;
+      dipStates[robot]=[v&1,(v>>1)&1,(v>>2)&1];
+    }
+    buildDips(robot);
+    setDipNotice('✅ DIP güncellendi: '+dipStates[robot].join(''),'ok');
+  }catch(e){}
+}
+function setDipNotice(txt, kind){
+  const el=document.getElementById('dipLockMsg'); if(!el) return;
+  el.className='diplock show'+(kind==='ok'?' open':'');
+  el.textContent=txt;
+  dipNoticeUntil=Date.now()+2600;
+  clearTimeout(setDipNotice._t);
+  setDipNotice._t=setTimeout(updateDipLockUI, 2700);
+}
+function updateDipLockUI(){
+  const el=document.getElementById('dipLockMsg'); if(!el) return;
+  if(Date.now() < dipNoticeUntil) return;   // anlık geri bildirimi ezme
+  const s=stateCache;
+  if(s && s.status==='break'){
+    el.className='diplock show open';
+    el.innerHTML='✅ Tur arası — DIP switch\'lerini şimdi değiştirebilirsiniz · <b>'+
+      Math.ceil(s.break_left||0)+' sn</b>';
+  } else if(DIP_LOCKED){
+    el.className='diplock show';
+    el.textContent='🔒 Tur sırasında kilitli — DIP switch\'ler yalnızca turlar arasında değiştirilebilir.';
+  } else if(isSpectator()){
+    el.className='diplock show';
+    el.textContent='👁 İzleyici modu — DIP switch\'ler salt okunur.';
+  } else {
+    el.className='diplock'; el.textContent='';
+  }
+}
+
+/* Ağırlık */
+const w1=document.getElementById('w1'), w2=document.getElementById('w2');
+w1.oninput=()=>document.getElementById('w1v').textContent=w1.value+' g';
+w2.oninput=()=>document.getElementById('w2v').textContent=w2.value+' g';
+document.getElementById('wApply').onclick=async()=>{
+  const send = async (robot, val) => {
+    const r=await postJSON('/api/weight',{mass_g:+val,robot});
+    const d=await r.json();
+    return d;
+  };
+  let d;
+  if(isPlayer()){
+    // Eğitim laboratuvarındaki tek test robotu her zaman 0 numaralı robottur.
+    const robot = (mode==='test') ? 0 : MY.role;
+    d = await send(robot, robot===0?w1.value:w2.value);
+  } else {
+    d = await send(0, w1.value);
+    if(d.ok && mode!=='test') d = await send(1, w2.value);
+  }
+  if(d && d.ok) flash('matchMsg',`Ağırlık uygulandı: ${w1.value} / ${w2.value} g`,'ok');
+  else flash('matchMsg','❌ '+((d&&d.error)||'Ağırlık değiştirilemedi'),'err');
+};
+
+/* Mod değiştirme (role duyarlı) */
+function setMode(m){
+  mode = m;
+  document.getElementById('modeMatch').classList.toggle('active', m==='match');
+  document.getElementById('modeTest').classList.toggle('active', m==='test');
+  const canUse = !isSpectator();
+  document.getElementById('matchControls').classList.toggle('hidden', !canUse || m!=='match');
+  document.getElementById('testControls').classList.toggle('hidden', !canUse || m!=='test');
+  document.getElementById('clockPill').classList.toggle('hidden', m!=='match');
+  document.getElementById('scorePill').classList.toggle('hidden', m!=='match');
+  document.getElementById('winnerPill').classList.toggle('hidden', m!=='match');
+  // Test modunda tek robot var → Kırmızı robot DIP grubunu gizle
+  document.getElementById('dipGroup1').classList.toggle('hidden', m==='test');
+  document.getElementById('editorCard').classList.toggle('hidden', isSpectator());
+  document.getElementById('viewTitle').textContent = m==='match'
+    ? 'Canlı 3D Saha — WebGL (GPU)' : 'Eğitim Sahası — Kod / Manuel Test';
+  applyDipPermissions();
+  applyWeightPermissions();
+  updateBuildStartLabel();
+}
+function updateBuildStartLabel(){
+  const b=document.getElementById('buildStart'); if(!b) return;
+  if(mode==='test') b.innerHTML='⚡ Derle &amp; Test Et';
+  else if(isPlayer()) b.innerHTML='📤 Kodu Gönder';
+  else if(isHost()) b.innerHTML='💾 Kodu Kaydet';
+  else b.innerHTML='⚡ Derle &amp; Başlat';
+}
+document.getElementById('modeMatch').onclick=()=>{
+  setMode('match');
+  if(isHost()) postJSON('/api/reset',{});
+};
+document.getElementById('modeTest').onclick=()=>{
+  if(isSpectator()) return;
+  setMode('test'); startTest();
+};
+
+/* ===================== MAÇ ===================== */
+const startBtn=document.getElementById('startBtn'), stopBtn=document.getElementById('stopBtn');
+function setRunning(r){ startBtn.disabled=r; stopBtn.disabled=!r; }
+startBtn.onclick=startMatch;
+stopBtn.onclick=async()=>{ await postJSON('/api/stop',{}); setRunning(false); };
+document.getElementById('resetBtn').onclick=async()=>{
+  await postJSON('/api/reset',{}); setRunning(false);
+  document.getElementById('winnerTxt').textContent='—';
+};
+async function startMatch(){
+  if(!isHost()){ flash('matchMsg','Maçı hakem başlatır.','err'); return; }
+  flash('matchMsg','Oyuncu kodları derleniyor…','ok');
+  try{
+    const r=await postJSON('/api/start',{});
+    const d=await r.json();
+    if(d.ok){ flash('matchMsg','✅ Maç başlatıldı — oyuncuların gönderdiği kodlar kullanıldı','ok'); setRunning(true); }
+    else flash('matchMsg','❌ '+(d.error||JSON.stringify(d)),'err');
+  }catch(e){ flash('matchMsg','❌ Sunucuya ulaşılamadı','err'); }
+}
+
+/* Editör (role duyarlı) */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick=async ()=>{
+    const bot=parseInt(t.dataset.bot);
+    if(!isHost() && bot!==(MY.role+1)) return;
+    code[currentBot]=document.getElementById('editor').value;
+    currentBot=bot;
+    document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===t));
+    if(isHost()) await refreshHostCode(currentBot-1);
+    document.getElementById('editor').value=code[currentBot]||'';
+  };
+});
+const editor=document.getElementById('editor');
+editor.addEventListener('keydown',e=>{ if(e.key==='Tab'){e.preventDefault();
+  const s=editor.selectionStart, en=editor.selectionEnd;
+  editor.value=editor.value.slice(0,s)+'  '+editor.value.slice(en);
+  editor.selectionStart=editor.selectionEnd=s+2;} });
+editor.addEventListener('input',()=>{
+  codeDirty[currentBot]=true;
+  if(isPlayer()) scheduleAutoSave();
+});
+function scheduleAutoSave(){
+  clearTimeout(autoSaveT);
+  autoSaveT=setTimeout(async ()=>{
+    if(!isPlayer()) return;
+    code[currentBot]=editor.value;
+    const d=await (await postJSON('/api/player/code',{code:editor.value})).json();
+    if(d.ok){
+      codeDirty[currentBot]=false; READY=false; updateReadyBtn();
+      flash('codeMsg','📤 Kod sunucuya gönderildi — hakem maçı başlatabilir.','ok');
+      pollRoom();
+    }
+  }, 900);
+}
+document.getElementById('checkBtn').onclick=async()=>{
+  flash('codeMsg','Derleniyor…','ok');
+  const d=await (await postJSON('/api/compile',{code:editor.value})).json();
+  flash('codeMsg', d.ok?('✅ '+d.message):('❌ '+d.error), d.ok?'ok':'err');
+};
+document.getElementById('buildStart').onclick=async()=>{
+  if(isSpectator()) return;
+  code[currentBot]=editor.value;
+  if(mode==='test'){
+    flash('codeMsg','Derleniyor ve teste veriliyor…','ok');
+    const d=await (await postJSON('/api/test/run',{code:editor.value})).json();
+    flash('codeMsg', d.ok?('✅ '+d.message):('❌ '+d.error), d.ok?'ok':'err');
+    return;
+  }
+  if(isPlayer()){
+    const d=await (await postJSON('/api/player/code',{code:editor.value})).json();
+    if(d.ok){
+      codeDirty[currentBot]=false; READY=false; updateReadyBtn();
+      flash('codeMsg','📤 Kod gönderildi. Hakem maçı başlatabilir.','ok');
+      pollRoom();
+    } else flash('codeMsg','❌ '+(d.error||'Kod gönderilemedi'),'err');
+    return;
+  }
+  // Hakem: bu sekmedeki kodu ilgili robota kaydet (maçı ▶ düğmesi başlatır)
+  const robot=currentBot-1;
+  const d=await (await postJSON('/api/player/code',{code:editor.value,robot})).json();
+  if(!d.ok){ flash('codeMsg','❌ '+(d.error||'Kod kaydedilemedi'),'err'); return; }
+  codeDirty[currentBot]=false;
+  flash('codeMsg',`💾 Robot ${robot+1} kodu kaydedildi — maçı ▶ Maçı Başlat ile açın.`,'ok');
+  pollRoom();
+};
+document.getElementById('saveBtn').onclick=async()=>{
+  const name=document.getElementById('fileName').value.trim();
+  if(!name){ flash('codeMsg','Dosya adı girin','err'); return; }
+  const d=await (await postJSON('/api/firmware',{name,content:editor.value})).json();
+  if(d.ok){ flash('codeMsg','💾 Kaydedildi: '+d.name,'ok'); loadFileList(); }
+  else flash('codeMsg','❌ '+(d.error||'Kaydedilemedi'),'err');
+};
+document.getElementById('loadBtn').onclick=async()=>{
+  const name=document.getElementById('fileSel').value; if(!name){flash('codeMsg','Dosya seçin','err');return;}
+  const d=await (await api('/api/firmware/'+encodeURIComponent(name))).json();
+  editor.value=d.content; code[currentBot]=d.content; codeDirty[currentBot]=true;
+  flash('codeMsg','📂 '+d.name,'ok');
+};
+document.getElementById('fileInput').onchange=async(e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const fd=new FormData(); fd.append('file',f);
+  const d=await (await api('/api/upload',{method:'POST',body:fd})).json();
+  if(d.ok){ editor.value=d.content; code[currentBot]=d.content; codeDirty[currentBot]=true;
+    flash('codeMsg','⬆ '+d.name,'ok'); loadFileList(); }
+  else flash('codeMsg','❌ '+(d.error||'Yüklenemedi'),'err');
+};
+async function loadFileList(){
+  try{
+    const d=await (await api('/api/firmware')).json();
+    document.getElementById('fileSel').innerHTML='<option value="">— Dosya —</option>'+
+      d.files.map(f=>`<option value="${f}">${f}</option>`).join('');
+  }catch(e){}
+}
+
+/* ===================== TEST / EĞİTİM ===================== */
+async function startTest(){
+  try{
+    const d=await (await postJSON('/api/test/start',{})).json();
+    if(!d.ok) flash('testMsg','❌ '+(d.error||'Test başlatılamadı'),'err');
+  }catch(e){}
+}
+document.getElementById('manualBtn').onclick=()=>{ startTest(); flash('testMsg','🕹️ Manuel moda dönüldü','ok'); };
+const ml=document.getElementById('ml'), mr=document.getElementById('mr');
+ml.oninput=()=>document.getElementById('mlv').textContent=ml.value;
+mr.oninput=()=>document.getElementById('mrv').textContent=mr.value;
+function applyMotors(){
+  postJSON('/api/test/motor',{left:+ml.value*4, right:+mr.value*4});   // -255..255 → -1020..1020
+}
+document.getElementById('mApply').onclick=()=>{ applyMotors(); flash('testMsg','Motor komutu uygulandı','ok'); };
+document.getElementById('mStop').onclick=()=>{ ml.value=0; mr.value=0;
+  document.getElementById('mlv').textContent='0'; document.getElementById('mrv').textContent='0';
+  applyMotors(); };
+// Hazır sürüş desenleri
+document.querySelectorAll('[data-drive]').forEach(b=>{
+  b.onclick=()=>{
+    const d=b.dataset.drive; let L=0,R=0;
+    const v=120;
+    if(d==='fw'){L=v;R=v;} else if(d==='back'){L=-v;R=-v;}
+    else if(d==='left'){L=v*0.5;R=v;} else if(d==='right'){L=v;R=v*0.5;}
+    else if(d==='tleft'){L=-v;R=v;} else if(d==='tright'){L=v;R=-v;}
+    ml.value=L; mr.value=R;
+    document.getElementById('mlv').textContent=L; document.getElementById('mrv').textContent=R;
+    applyMotors();
+  };
+});
+// Sürekli desenler (kare dön / daire) — 3 sn uygula
+function patternLoop(seq){
+  let i=0; const iv=setInterval(()=>{
+    if(i>=seq.length){ clearInterval(iv); return; }
+    const [L,R]=seq[i++]; ml.value=L; mr.value=R;
+    document.getElementById('mlv').textContent=L; document.getElementById('mrv').textContent=R;
+    applyMotors();
+  }, 60);
+}
+document.querySelector('[data-drive="spin"]').onclick=()=>{ ml.value=120;mr.value=-120;
+  document.getElementById('mlv').textContent=120;document.getElementById('mrv').textContent=-120; applyMotors(); };
+document.querySelector('[data-drive="circle"]').onclick=()=>{ ml.value=120;mr.value=60;
+  document.getElementById('mlv').textContent=120;document.getElementById('mrv').textContent=60; applyMotors(); };
+
+// Sensör testi — robot yerleştirme
+const rx=document.getElementById('rx'), ry=document.getElementById('ry'), ryaw=document.getElementById('ryaw');
+rx.oninput=()=>document.getElementById('rxv').textContent=(rx.value/100).toFixed(2);
+ry.oninput=()=>document.getElementById('ryv').textContent=(ry.value/100).toFixed(2);
+ryaw.oninput=()=>document.getElementById('ryawv').textContent=ryaw.value+'°';
+function placeRobot(){ postJSON('/api/test/place',
+  {x:+rx.value/100, y:+ry.value/100, yaw:+ryaw.value*Math.PI/180}); }
+document.getElementById('placeApply').onclick=placeRobot;
+document.getElementById('placeCenter').onclick=()=>{ rx.value=0; ry.value=0; ryaw.value=0;
+  document.getElementById('rxv').textContent='0.00'; document.getElementById('ryv').textContent='0.00';
+  document.getElementById('ryawv').textContent='0°'; placeRobot(); };
+document.getElementById('placeEdge').onclick=()=>{ rx.value=32; ry.value=0; ryaw.value=0;
+  document.getElementById('rxv').textContent='0.32'; document.getElementById('ryv').textContent='0.00';
+  document.getElementById('ryawv').textContent='0°'; placeRobot(); };
+
+// Hedef yerleştirme
+const tx=document.getElementById('tx'), ty=document.getElementById('ty');
+tx.oninput=()=>document.getElementById('txv').textContent=(tx.value/100).toFixed(2);
+ty.oninput=()=>document.getElementById('tyv').textContent=(ty.value/100).toFixed(2);
+function applyTarget(){ postJSON('/api/test/target',
+  {x:+tx.value/100, y:+ty.value/100}); }
+document.getElementById('targetApply').onclick=applyTarget;
+document.getElementById('targetFront').onclick=()=>{ tx.value=15; ty.value=0;
+  document.getElementById('txv').textContent='0.15'; document.getElementById('tyv').textContent='0.00'; applyTarget(); };
+document.getElementById('targetRight').onclick=()=>{ tx.value=0; ty.value=-15;
+  document.getElementById('txv').textContent='0.00'; document.getElementById('tyv').textContent='-0.15'; applyTarget(); };
+document.getElementById('targetHide').onclick=()=>{ tx.value=90; ty.value=90; applyTarget(); };
+
+/* ===================== Telemetri ===================== */
+function renderTeams(robots, s){
+  const el=document.getElementById('teams');
+  if(!robots.length){ el.innerHTML='<div style="color:var(--muted);font-size:.8rem">Aktif robot yok. Maç başlat veya Eğitim moduna geç.</div>'; return; }
+  const dips = (s && s.dips) ? s.dips : [0,0];
+  el.innerHTML = robots.map((r,i)=>{
+    const cls=i===0?'mavi':'kirmizi', emoji=i===0?'🟦':'🟥';
+    const mine = isPlayer() && i===MY.role;
+    const pwm=Math.round((r.pwm_left||0)/1023*100), pwm2=Math.round((r.pwm_right||0)/1023*100);
+    const ql=r.sensors.qtr_left, qr=r.sensors.qtr_right;
+    const qlTag = ql<400?'black':'white', qrTag = qr<400?'black':'white';
+    const dv = dips[i]!=null ? dips[i] : 0;
+    const dipTxt = `${dv&1}${(dv>>1)&1}${(dv>>2)&1}`;
+    return `
+    <div class="team ${cls}">
+      <div class="th"><b>${emoji} ${r.name||('Robot '+(i+1))}</b><span class="tag">${mine?'SİZ · ':''}${r.mass_g||500} g</span></div>
+      <div class="row"><span>DIP switch</span><span class="mono">${dipTxt}</span></div>
+      <div class="row"><span>QTR sol</span><span class="mono big">${ql} <span class="badge-sensor ${qlTag}">${qlTag==='black'?'KENAR':'BEYAZ'}</span></span></div>
+      <div class="row"><span>QTR sağ</span><span class="mono big">${qr} <span class="badge-sensor ${qrTag}">${qrTag==='black'?'KENAR':'BEYAZ'}</span></span></div>
+      <div class="row"><span>E3Z sol</span><span class="mono ${r.sensors.e3z_left?'hit':''}">${r.sensors.e3z_left?'● RAKİP':'○ —'}</span></div>
+      <div class="row"><span>E3Z sağ</span><span class="mono ${r.sensors.e3z_right?'hit':''}">${r.sensors.e3z_right?'● RAKİP':'○ —'}</span></div>
+      <div class="row"><span>Sol motor PWM</span><span class="mono">${pwm}%</span></div>
+      <div class="bar"><i style="width:${pwm}%"></i></div>
+      <div class="row" style="margin-top:6px"><span>Sağ motor PWM</span><span class="mono">${pwm2}%</span></div>
+      <div class="bar"><i style="width:${pwm2}%"></i></div>
+      <div class="row" style="margin-top:6px"><span>Konum</span><span class="mono">${(r.position[0]).toFixed(2)}, ${(r.position[1]).toFixed(2)}</span></div>
+    </div>`;
+  }).join('');
+}
+
+/* ===================== Durum döngüsü ===================== */
+let wasTestActive=false;
+async function pollState(){
+  try{
+    const s=await (await api('/api/state')).json();
+    stateCache = s;
+    document.getElementById('connDot').className='dot live';
+    document.getElementById('connTxt').textContent='Bağlı';
+    applyState(s);
+
+    const map={idle:'boşta',countdown:'geri sayım',running:'çalışıyor',break:'tur arası',
+               finished:'bitti',test:'test modu',error:'HATA'};
+    document.getElementById('clock').textContent=(s.time||0).toFixed(1);
+    if(s.score){ document.getElementById('score1').textContent=s.score[0];
+                 document.getElementById('score2').textContent=s.score[1]; }
+    if(s.round) document.getElementById('roundTxt').textContent=s.round;
+    const rw = (s.match_winner!==null&&s.match_winner!==undefined) ? s.match_winner
+             : ((s.round_winner!==null&&s.round_winner!==undefined) ? s.round_winner : null);
+    document.getElementById('winnerTxt').textContent =
+      rw===null?'—':(rw===0?'Mavi 🟦':'Kırmızı 🟥');
+    if(s.status==='finished' && s.match_winner!=null && lastMatchWinner!==s.match_winner){
+      lastMatchWinner=s.match_winner;
+      const name = s.match_winner===0?'Mavi 🟦':'Kırmızı 🟥';
+      flash('matchMsg', `🏆 Maç bitti! Kazanan: ${name}  (${s.score[0]} - ${s.score[1]})`,'ok');
+    }
+    if(s.status==='running') lastMatchWinner=null;
+
+    const cd=document.getElementById('countdown');
+    if(s.status==='countdown'&&s.countdown>0){ cd.classList.add('show'); cd.textContent=Math.ceil(s.countdown); }
+    else cd.classList.remove('show');
+
+    const bb=document.getElementById('breakBanner');
+    if(s.status==='break'){
+      bb.classList.add('show');
+      document.getElementById('breakLeft').textContent=Math.ceil(s.break_left||0);
+    } else bb.classList.remove('show');
+
+    if(mode==='match'){
+      if(s.status==='running') setRunning(true);
+      if(['idle','finished','error','break'].includes(s.status)) setRunning(false);
+    }
+    // Maç sürerken eğitim laboratuvarı kapalı
+    const matchBusy = s.mode==='match' && ['countdown','running','break'].includes(s.status);
+    document.getElementById('modeTest').disabled = matchBusy;
+    if(mode==='test' && matchBusy){
+      setMode('match');
+      flash('testMsg','🏟️ Maç başladı — eğitim laboratuvarı kapatıldı.','err');
+    }
+
+    // DIP kilidi / senkron
+    const lockedNow = !!s.dip_locked;
+    if(lockedNow !== DIP_LOCKED){
+      DIP_LOCKED = lockedNow;
+      buildDips(0); buildDips(1);
+    }
+    if(s.dips){
+      for(const robot of [0,1]){
+        if(Date.now() <= dipLockT[robot]) continue;
+        const v = s.dips[robot]||0;
+        const arr=[v&1,(v>>1)&1,(v>>2)&1];
+        if(arr.join()!==dipStates[robot].join()){ dipStates[robot]=arr; buildDips(robot); }
+      }
+    }
+    updateDipLockUI();
+    updateReadyBtn();
+
+    if(s.error) flash('matchMsg','❌ '+s.error,'err');
+    if(s.error && mode==='test') flash('codeMsg','❌ '+s.error,'err');
+
+    if(mode==='test'){
+      const fw = !!s.test_has_firmware;
+      const badge=document.getElementById('testModeBadge');
+      badge.textContent = fw?'FİRMWARE':'MANUEL';
+      badge.classList.toggle('on', fw);
+      document.getElementById('drivePad').style.opacity = fw?0.35:1;
+      document.getElementById('drivePad').style.pointerEvents = fw?'none':'auto';
+      ['ml','mr','mApply','mStop'].forEach(id=>document.getElementById(id).disabled=fw);
+      document.getElementById('testStateHint').innerHTML = fw
+        ? 'Firmware çalışıyor — robot yazdığın koda göre hareket ediyor. <b>DIP switch</b> ile modunu değiştir, hedefi konumlandırıp sensörleri izle.'
+        : 'Manuel mod: robotu elle sür. Kod test etmek için aşağıdaki editörden <b>Derle &amp; Test Et</b>’e bas.';
+    }
+  }catch(e){
+    document.getElementById('connDot').className='dot';
+    document.getElementById('connTxt').textContent='Bağlantı yok';
+  }
+}
+
+/* ===================== Oda / oyuncu arayüzü ===================== */
+function updateReadyBtn(){
+  const b=document.getElementById('readyBtn'); if(!b) return;
+  if(!isPlayer()) return;
+  b.innerHTML = READY ? '⏳ Hazır (iptal et)' : '✅ Hazırım';
+  b.classList.toggle('primary', !READY);
+  b.classList.toggle('ghost', READY);
+}
+function renderRoomPlayers(r){
+  const el=document.getElementById('roomPlayers'); if(!el) return;
+  const rows=[];
+  // Hakem
+  const hc=r.host && r.host.connected;
+  rows.push(`<div class="roomplayer">
+    <span class="side" style="background:var(--accent);box-shadow:0 0 9px var(--accent)"></span>
+    <div class="who"><b>🎓 ${(r.host&&r.host.name)||'Hakem'}</b><span>Hakem · maçı başlatır</span></div>
+    <span class="st ${hc?'online':'offline'}">${hc?'BAĞLI':'KOPUK'}</span>
+  </div>`);
+  // Oyuncular
+  (r.players||[]).forEach((p,i)=>{
+    const side=i===0?'blue':'red', label=i===0?'🟦 Mavi':'🟥 Kırmızı';
+    const mine=isPlayer()&&MY.role===i;
+    if(!p){
+      rows.push(`<div class="roomplayer">
+        <span class="side ${side}"></span>
+        <div class="who"><b>${label}${mine?' · SİZ':''}</b><span>Oyuncu bekleniyor…</span></div>
+        <span class="st offline">BOŞ</span></div>`);
+      return;
+    }
+    const st = p.ready ? 'HAZIR' : (p.connected?'BAĞLI':'KOPUK');
+    const stcls = p.ready ? 'ready' : (p.connected?'online':'offline');
+    rows.push(`<div class="roomplayer">
+      <span class="side ${side}"></span>
+      <div class="who"><b>${label}${mine?' · SİZ':''}</b>
+        <span>${p.name} · ${p.has_code?'kod ✓':'kod yok'}</span></div>
+      <span class="st ${stcls}">${st}</span></div>`);
+  });
+  el.innerHTML=rows.join('');
+  const hint=document.getElementById('roomHint');
+  if(hint){
+    if(isHost()) hint.innerHTML='Oyuncular kodlarını gönderip <b>Hazırım</b> dediğinde <b>▶ Maçı Başlat</b>’a basın. Kodlar otomatik olarak son gönderilen sürümdür.';
+    else if(isPlayer()) hint.innerHTML='Kodunuzu gönderin ve <b>Hazırım</b>’a basın. DIP switch\'leriniz tur aralarında açılır.';
+    else hint.innerHTML='İzleyici modundasınız — maçı canlı 3B izliyorsunuz.';
+  }
+  const rr=document.getElementById('readyRow');
+  if(rr) rr.style.display=isPlayer()?'flex':'none';
+}
+async function pollRoom(){
+  if(!entered) return;
+  try{
+    const r=await (await api('/api/room')).json();
+    ROOMINFO=r;
+    if(r.open){
+      // Oda kapandı (hakem ayrıldı)
+      if(!isSpectator()){ TOKEN=''; localStorage.removeItem('sumo_token'); showLobby('Oda kapandı. Yeni oda oluşturabilir veya katılabilirsiniz.'); }
+      return;
+    }
+    if(r.you.kind==='spectator' && TOKEN && !isSpectator()){
+      TOKEN=''; localStorage.removeItem('sumo_token');
+      showLobby('Oturum sona erdi. Oda koduyla yeniden katılın.');
+      return;
+    }
+    const changed = (MY.kind!==r.you.kind || MY.role!==r.you.role);
+    MY=r.you;
+    if(changed){ currentBot = isPlayer()?MY.role+1:1; applyRoleUI(); loadRoomCodes(); }
+    renderRoomPlayers(r);
+    // Hakem, oyuncunun yeni kodunu otomatik görsün
+    if(isHost()){
+      for(const i of [0,1]){
+        const p=r.players && r.players[i];
+        if(p && p.has_code && !codeDirty[i+1]) await refreshHostCode(i);
+      }
+    }
+    READY = isPlayer() && r.players && r.players[MY.role] ? !!r.players[MY.role].ready : false;
+    updateReadyBtn();
+  }catch(e){}
+}
+async function refreshHostCode(robot){
+  if(!isHost()) return;
+  try{
+    const d=await (await api('/api/player/code?robot='+robot)).json();
+    if(d.ok && d.code){
+      code[robot+1]=d.code;
+      if(currentBot===robot+1 && !codeDirty[robot+1]) editor.value=d.code;
+    }
+  }catch(e){}
+}
+function applyRoleUI(){
+  const roleTxt=document.getElementById('roleTxt');
+  const rolePill=document.getElementById('rolePill');
+  rolePill.classList.remove('blue','red','host');
+  if(isHost()){ roleTxt.textContent='🎓 Hakem'; rolePill.classList.add('host'); }
+  else if(isPlayer()){
+    roleTxt.textContent = MY.role===0?'🟦 Mavi Oyuncu':'🟥 Kırmızı Oyuncu';
+    rolePill.classList.add(MY.role===0?'blue':'red');
+  } else { roleTxt.textContent='👁 İzleyici'; }
+  document.getElementById('roomCodeTxt').textContent = (ROOMINFO && ROOMINFO.code) || 'AÇIK';
+
+  // DIP grupları
+  applyDipPermissions();
+
+  // Sekmeler
+  document.querySelectorAll('.tab').forEach(t=>{
+    const bot=parseInt(t.dataset.bot);
+    const show = isHost() || (isPlayer() && bot===MY.role+1);
+    t.classList.toggle('hidden', !show);
+    t.classList.toggle('active', bot===currentBot);
+  });
+  document.getElementById('editorCard').classList.toggle('hidden', isSpectator());
+  document.getElementById('readyRow').style.display=isPlayer()?'flex':'none';
+  document.getElementById('playerMatchHint').classList.toggle('hidden', !isPlayer());
+  document.getElementById('modeTest').classList.toggle('hidden', isSpectator());
+
+  // Maç kontrolleri: yalnızca hakem başlatır/durdurur/sıfırlar
+  document.getElementById('startBtn').style.display=isHost()?'':'none';
+  document.getElementById('stopBtn').style.display=isHost()?'':'none';
+  document.getElementById('resetBtn').style.display=isHost()?'':'none';
+  // Ağırlık: oyuncu yalnızca kendi robotunu değiştirir
+  applyWeightPermissions();
+  updateBuildStartLabel();
+  updateReadyBtn();
+  updateDipLockUI();
+}
+function applyDipPermissions(){
+  const test = (mode==='test');
+  const ro0 = isSpectator() || (isPlayer() && !test && MY.role!==0);
+  const ro1 = isSpectator() || (isPlayer() && MY.role!==1) || test;
+  document.getElementById('dipGroup0').classList.toggle('readonly', ro0);
+  document.getElementById('dipGroup1').classList.toggle('readonly', ro1);
+  document.getElementById('youTag0').classList.toggle('hidden',
+    !(isPlayer() && (MY.role===0 || test)));
+  document.getElementById('youTag1').classList.toggle('hidden',
+    !(isPlayer() && MY.role===1 && !test));
+  buildDips(0); buildDips(1);
+}
+function applyWeightPermissions(){
+  const test = (mode==='test');
+  w1.disabled = isSpectator() || (isPlayer() && !test && MY.role!==0);
+  w2.disabled = isSpectator() || (isPlayer() && MY.role!==1) || test;
+  document.getElementById('wApply').style.display=isSpectator()?'none':'';
+}
+async function loadRoomCodes(){
+  try{
+    if(isPlayer()){
+      const d=await (await api('/api/player/code')).json();
+      if(d.ok && d.code) code[MY.role+1]=d.code;
+    } else if(isHost()){
+      for(const i of [0,1]) await refreshHostCode(i);
+    }
+  }catch(e){}
+  if(!code[1] || !code[2]) await initDefaults();
+  else { editor.value=code[currentBot]||code[1]||''; loadFileList(); }
+}
+async function enterFromRoom(room){
+  ROOMINFO=room; MY=room.you;
+  currentBot = isPlayer()?MY.role+1:1;
+  READY = isPlayer() && room.players && room.players[MY.role] ? !!room.players[MY.role].ready : false;
+  entered=true;
+  document.getElementById('lobby').classList.add('hidden');
+  applyRoleUI();
+  renderRoomPlayers(room);
+  await loadRoomCodes();
+  setMode('match');
+  pollState();
+}
+function showLobby(msg){
+  entered=false;
+  document.getElementById('lobby').classList.remove('hidden');
+  const m=document.getElementById('lobbyMsg');
+  if(msg){ m.className='msg err'; m.textContent=msg; }
+  else { m.className='msg'; m.textContent=''; }
+}
+function lobbyError(msg){
+  const m=document.getElementById('lobbyMsg');
+  m.className='msg err'; m.textContent=msg;
+}
+async function createRoom(){
+  const name=document.getElementById('hostName').value.trim()||'Hakem';
+  try{
+    const r=await postJSON('/api/room/create',{name});
+    const d=await r.json();
+    if(!d.ok){ lobbyError(d.error||'Oda oluşturulamadı'); return; }
+    TOKEN=d.token; localStorage.setItem('sumo_token',TOKEN);
+    await enterFromRoom(d.room);
+  }catch(e){ lobbyError('Sunucuya ulaşılamadı'); }
+}
+async function joinRoom(){
+  const code=document.getElementById('joinCode').value.trim().toUpperCase();
+  const name=document.getElementById('joinName').value.trim();
+  if(!code){ lobbyError('Oda kodunu girin'); return; }
+  if(!joinSide){ lobbyError('Taraf seçin'); return; }
+  try{
+    const r=await postJSON('/api/room/join',{code,side:joinSide,name});
+    const d=await r.json();
+    if(!d.ok){ lobbyError(d.error||'Odaya katılınamadı'); return; }
+    TOKEN=d.token; localStorage.setItem('sumo_token',TOKEN);
+    await enterFromRoom(d.room);
+  }catch(e){ lobbyError('Sunucuya ulaşılamadı'); }
+}
+async function leaveRoom(){
+  try{ await postJSON('/api/room/leave',{}); }catch(e){}
+  TOKEN=''; localStorage.removeItem('sumo_token');
+  MY={kind:'spectator',role:null,name:'İzleyici'}; entered=false; ROOMINFO=null;
+  showLobby('Odadan ayrıldınız.');
+}
+async function toggleReady(){
+  if(!isPlayer()) return;
+  try{
+    const d=await (await postJSON('/api/player/ready',{ready:!READY})).json();
+    if(d.ok){ READY=!READY; updateReadyBtn(); pollRoom(); }
+    else flash('matchMsg','❌ '+(d.error||'Hazır durumu değiştirilemedi'),'err');
+  }catch(e){}
+}
+
+
+async function loadPins(){
+  const d=await (await api('/api/config')).json(); const p=d.pins;
+  document.getElementById('pins').innerHTML=
+    `QTR-1A sol → <b>${p.qtr_left}</b> · sağ → <b>${p.qtr_right}</b><br>
+     E3Z-D81 sol → <b>${p.e3z_left}</b> · sağ → <b>${p.e3z_right}</b><br>
+     Motor PWM → <b>${p.motor_left_pwm}</b>, <b>${p.motor_right_pwm}</b><br>
+     Motor yön → <b>${p.motor_left_dir.join(' ')}</b>, <b>${p.motor_right_dir.join(' ')}</b><br>
+     Enable → <b>${p.motor_enable}</b><br>
+     DIP 1/2/3 → <b>${p.dip1} ${p.dip2} ${p.dip3}</b><br>
+     Pil (3S) → <b>${p.vbat}</b> · Buton → <b>${p.button}</b><br>
+     Dohyo <b>Ø${d.ring_diameter_mm} mm</b> · kenar <b>${d.edge_width_mm} mm</b><br>
+     Motor <b>${d.motor_rpm} RPM @ ${d.motor_voltage}V</b> · <b>${d.battery}</b>`;
+}
+
+async function initDefaults(){
+  const demo = `/* Mini Sumo Robot — Arduino Nano
+ * Pinler panelde listelenmiştir. Sırt sırta başlarız; dönüp rakibi ara. */
+#define QTR_L A0
+#define QTR_R A1
+#define E3Z_L 2
+#define E3Z_R 3
+#define ML_PWM 9
+#define MR_PWM 10
+#define ML_A 7
+#define ML_B 8
+#define MR_A 4
+#define MR_B 12
+#define MEN 6
+#define DIP1 A2
+#define DIP2 A3
+#define DIP3 A4
+
+void motor(int l, int r){
+  digitalWrite(MEN, HIGH);
+  digitalWrite(ML_A, l>=0); digitalWrite(ML_B, l<0);
+  digitalWrite(MR_A, r>=0); digitalWrite(MR_B, r<0);
+  analogWrite(ML_PWM, constrain(abs(l),0,255));
+  analogWrite(MR_PWM, constrain(abs(r),0,255));
+}
+void setup(){
+  pinMode(ML_A,OUTPUT);pinMode(ML_B,OUTPUT);pinMode(MR_A,OUTPUT);pinMode(MR_B,OUTPUT);pinMode(MEN,OUTPUT);
+  pinMode(E3Z_L,INPUT);pinMode(E3Z_R,INPUT);
+  pinMode(DIP1,INPUT_PULLUP);pinMode(DIP2,INPUT_PULLUP);pinMode(DIP3,INPUT_PULLUP);
+}
+void loop(){
+  int ql=analogRead(QTR_L), qr=analogRead(QTR_R);
+  bool el=digitalRead(E3Z_L), er=digitalRead(E3Z_R);
+  bool d1=!digitalRead(DIP1), d2=!digitalRead(DIP2);
+  if(ql<400||qr<400){ motor(-180,-180); return; }  // kenar
+  if(el||er){ motor(255,255); return; }             // rakip -> saldır
+  if(d1) motor(180,-120); else if(d2) motor(-120,180); else motor(160,-160); // ara
+  delay(5);
+}`;
+  if(!code[1] && !code[2]){
+    try{
+      const d=await (await api('/api/firmware')).json();
+      if(d.files&&d.files.length){
+        const f=await (await api('/api/firmware/'+encodeURIComponent(d.files[0]))).json();
+        code[1]=f.content; code[2]=f.content;
+      } else { code[1]=demo; code[2]=demo; }
+    }catch(e){ code[1]=demo; code[2]=demo; }
+  }
+  if(!code[1]) code[1]=demo;
+  if(!code[2]) code[2]=demo;
+  editor.value=code[currentBot]||demo;
+  loadFileList();
+}
+
+/* ===================== Başlangıç ===================== */
+(async function(){
+  buildDips(0); buildDips(1);
+  init3D();
+  loadPins();
+  setMode('match');
+
+  // Lobi olayları
+  document.querySelectorAll('.sidesel button').forEach(b=>{
+    b.onclick=()=>{
+      joinSide=b.dataset.side;
+      document.querySelectorAll('.sidesel button').forEach(x=>x.classList.toggle('active',x===b));
+    };
+  });
+  const blueBtn=document.querySelector('.sidesel button[data-side="blue"]');
+  if(blueBtn) blueBtn.classList.add('active');
+
+  document.getElementById('createRoomBtn').onclick=createRoom;
+  document.getElementById('joinRoomBtn').onclick=joinRoom;
+  document.getElementById('leaveBtn').onclick=leaveRoom;
+  document.getElementById('readyBtn').onclick=toggleReady;
+  document.getElementById('spectateBtn').onclick=async ()=>{
+    try{
+      const r=await (await api('/api/room')).json();
+      if(r.open){ lobbyError('Önce hakem bir oda oluşturmalı.'); return; }
+      TOKEN=''; localStorage.removeItem('sumo_token');
+      MY={kind:'spectator',role:null,name:'İzleyici'};
+      ROOMINFO=r; entered=true;
+      document.getElementById('lobby').classList.add('hidden');
+      applyRoleUI(); renderRoomPlayers(r); setMode('match');
+      pollState();
+    }catch(e){ lobbyError('Sunucuya ulaşılamadı'); }
+  };
+
+  // URL'de oda kodu varsa doldur
+  const rc=(new URLSearchParams(location.search).get('room')||'').toUpperCase();
+  if(rc) document.getElementById('joinCode').value=rc;
+
+  // Mevcut oturum var mı?
+  try{
+    const r=await (await api('/api/room')).json();
+    if(!r.open && (r.you.kind==='host' || r.you.kind==='player')){
+      await enterFromRoom(r);
+    } else {
+      showLobby();
+    }
+  }catch(e){
+    showLobby('Sunucuya bağlanılamadı. Docker konteyneri çalışıyor mu?');
+  }
+
+  setInterval(pollState, 100);   // ~10 Hz durum
+  setInterval(pollRoom, 1000);   // oda / oyuncu durumu
+  pollState();
+})();
+</script>
+</body>
+</html>

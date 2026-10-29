@@ -1,0 +1,36 @@
+services:
+  sumo-sim:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: mini-sumo-sim:latest
+    container_name: mini-sumo-sim
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,graph,display
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - NVIDIA_DRIVER_CUDA_VERSION=12.4
+    volumes:
+      - ./:/app
+      - /dev/shm:/dev/shm
+      - /tmp:/tmp
+    network_mode: host
+    ports:
+      - "7101:7101"
+      - "7012:7101"
+      - "7013:7101"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+        limits:
+          memory: 16g
+    ipc: host
+    stdin_open: true
+    tty: true
+    command: python3 -m uvicorn panel.main:app --host 0.0.0.0 --port 7101 --workers 1

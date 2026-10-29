@@ -1,0 +1,97 @@
+# Mini Sumo Simulator Konfigürasyonu
+# Bu dosya panodan veya koddan yüklenebilir
+
+robot:
+  # Arduino Nano (ATmega328P) özellikleri
+  processor: "ATmega328P"
+  clock: 16000000  # Hz
+  flash_size: 32768  # bytes (32 KB)
+  ram_size: 2048  # bytes (2 KB)
+  
+  # Ağırlık (maksimum 500g)
+  default_weight_g: 500
+  min_weight_g: 100
+  max_weight_g: 500
+  
+  # Motor - jSumo Force Up 6V 250 RPM
+  motor:
+    voltage_nominal: 6.0  # V
+    voltage_max: 11.1  # 3S LiPo
+    rpm_nominal: 250
+    torque_max: 0.5  # N·m (tahmini)
+    
+  # Tekerlek özellikleri
+  wheel_radius_m: 0.02  # 2 cm
+  wheel_width_m: 0.015  # 1.5 cm
+  
+# Dohyo (Ring) özellikleri
+ring:
+  diameter_m: 0.770  # 77 cm
+  edge_width_m: 0.025  # 2.5 cm
+  surface_color: 0.95  # Beyaz
+  edge_color: 0.30  # Siyah
+
+# Fizik motoru parametreleri
+physics:
+  timestep: 0.00416667  # 1/240 s
+  gravity: -9.81
+  friction: 0.8
+  mass_default_kg: 0.5  # 500g
+  
+  # Robot kütle parametresi - değiştirilebilir
+  mass_kg: 0.5  # 100-500 g arası ayarlanabilir
+
+# Sensörler
+sensors:
+  # QTR-1A (Analog yansıma sensörü)
+  qtr1a:
+    type: "analog"
+    range_min: 0
+    range_max: 1023
+    pin_left: "A0"
+    pin_right: "A1"
+    
+  # E3Z-D81 (Fotoelektrik, dijital)
+  e3z_d81:
+    type: "digital"
+    pin_left: "D2"
+    pin_right: "D3"
+    range_m: 0.30  # 30 cm algılama mesafesi
+    
+# DIP Switch - 3 tane, 2 konumlu
+dip_switches:
+  count: 3
+  type: "SPDT"  # Single Pole Double Throw
+  pins:
+    - "A2"
+    - "A3"
+    - "A4"
+  pullup: true  # INPUT_PULLUP
+  active_state: 0  # GND'ye kapalı = aktif (LOW)
+
+# Güç (3S LiPo)
+battery:
+  chemistry: "LiPo"
+  cells: 3  # 3S
+  voltage_nominal: 11.1  # V
+  voltage_full: 12.6  # V
+  voltage_cutoff: 9.0  # V
+  
+# Firmware yükleme
+firmware:
+  compiler: "arduino-cli"
+  board: "arduino:avr:nano:cpu=atmega328"
+  upload_port: "/dev/ttyACM0"
+  upload_speed: 57600
+
+# Yarış parametreleri
+match:
+  duration_s: 180  # 3 dakika
+  start_delay_s: 5  # 5 saniye geri sayım
+  best_of: 1  # En iyi N maç
+  
+# Panel
+panel:
+  host: "0.0.0.0"
+  port: 8000
+  render_mode: "EGL"  # NVIDIA GPU için
