@@ -173,16 +173,21 @@ class RoomManager:
         with self.lock:
             if token and self.host_token and secrets.compare_digest(token, self.host_token):
                 # Hakem ayrılırsa oda kapanır
-                self.code = None
-                self.host_token = None
-                self.host_last_seen = 0.0
-                self.players = {0: None, 1: None}
+                self.close()
                 return True
             for role, p in self.players.items():
                 if p and token and secrets.compare_digest(token, p.token):
                     self.players[role] = None
                     return True
             return False
+
+    def close(self):
+        """Odayı kapat (açık moda dön)."""
+        with self.lock:
+            self.code = None
+            self.host_token = None
+            self.host_last_seen = 0.0
+            self.players = {0: None, 1: None}
 
     def state(self, token=None):
         kind, role, player = self.resolve(token)

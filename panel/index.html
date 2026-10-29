@@ -617,6 +617,7 @@ function makeRobot(colorHex){
   const irMat    = new THREE.MeshStandardMaterial({color:0x330a0a, emissive:0x661414, emissiveIntensity:0.7, roughness:0.5});
 
   // --- Gövde: yan silueti extrude (önü alçak, arkaya doğru yükselen) ---
+  // Çerçeve = ağırlık merkezi (CoM). Yerden yükseklik = lokal z + 0.0207.
   const s = new THREE.Shape();
   s.moveTo(-0.046, 0.000);
   s.lineTo( 0.046, 0.000);
@@ -628,59 +629,84 @@ function makeRobot(colorHex){
   const body = new THREE.Mesh(
     new THREE.ExtrudeGeometry(s, {depth:0.068, bevelEnabled:true,
       bevelThickness:0.0016, bevelSize:0.0016, bevelSegments:2}), bodyMat);
-  body.rotation.x = Math.PI/2;          // profil (x,z) → dünya; extrude genişlik
-  body.position.set(0, 0.034, -0.024);  // taban z=-0.024, genişlik ortalanmış
+  body.rotation.x = Math.PI/2;             // profil (x,z) → dünya; extrude = genişlik
+  body.position.set(-0.003, 0.034, -0.0152); // taban yerden ~5.5 mm
   body.castShadow = true; body.receiveShadow = true;
   group.add(body);
 
-  // --- Ön çelik bıçak (plow) — dikeye yakın eğimli, yere değer ---
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.100, 0.0032), steelMat);
-  blade.rotation.y = -Math.PI * 0.38;
-  blade.position.set(0.054, 0, -0.008);
-  blade.castShadow = true;
-  group.add(blade);
-  // bıçak üst dudağı (yataya yakın)
-  const bladeTop = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.100, 0.0032), steelMat);
-  bladeTop.rotation.y = -Math.PI * 0.07;
-  bladeTop.position.set(0.041, 0, -0.021);
-  bladeTop.castShadow = true;
-  group.add(bladeTop);
+  /* --- ÖN ÇELİK KAMA (bıçak) --------------------------------------------
+     Gerçek mini sumo bıçağı: yatayla ~22° açılı, öne doğru incelen ince
+     çelik plaka. Ön ucu yerden ~0.5 mm yüksekte, arkası gövdeye bağlı.
+     Rakibin altına girip kaldıran rampa. URDF'teki kama collider'ı ile
+     aynı geometri (profil üçgeni → prizma, genişlik tam gövde).        */
+  function wedgeMesh(profile, width, mat){
+    const shp = new THREE.Shape();
+    // profil: [x, z] lokal koordinatlar → şekil (u, v) = (x, -z)
+    shp.moveTo(profile[0][0], -profile[0][1]);
+    for (let i = 1; i < profile.length; i++)
+      shp.lineTo(profile[i][0], -profile[i][1]);
+    shp.closePath();
+    const g = new THREE.ExtrudeGeometry(shp,
+      {depth:width, bevelEnabled:false, curveSegments:1});
+    g.translate(0, 0, -width/2);   // genişliği ortala (extrude z: 0..w)
+    g.rotateX(-Math.PI/2);         // şekil düzlemi (u,v) → dünya (x, z)
+    const m = new THREE.Mesh(g, mat);
+    m.castShadow = true; m.receiveShadow = true;
+    return m;
+  }
+  const bladeProfile = [
+    [0.0495, -0.02015],   // ön uç: yerden ~0.5 mm (keskin ağız)
+    [0.0260, -0.01070],   // arka alt
+    [0.0260, -0.00720],   // arka üst  (arka kalınlık 3.5 mm)
+  ];
+  group.add(wedgeMesh(bladeProfile, 0.092, steelMat));
+  // kama ağız çizgisi (parlak ince şerit — keskinliği vurgular)
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.092, 0.0022),
+    new THREE.MeshStandardMaterial({color:0xeef3f8, roughness:0.1, metalness:1.0}));
+  edge.rotation.y = 0.38;
+  edge.position.set(0.0443, 0, -0.0174);
+  group.add(edge);
+  // kama bağlantı takozları (gövdeye montaj)
+  [0.030, -0.030].forEach(y=>{
+    const br = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.006, 0.008), bodyMat2);
+    br.position.set(0.032, y, -0.0115); br.castShadow = true; group.add(br);
+  });
 
-  // --- Üstte açık elektronik (PCB) ---
+  // --- Üstte açık elektronik (PCB) — şasi üst yüzeyine oturur (z=0.0378) ---
   const pcb = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.056, 0.004), pcbBlue);
-  pcb.position.set(-0.020, 0, 0.026); pcb.castShadow = true; pcb.receiveShadow = true;
+  pcb.position.set(-0.020, 0, 0.0396); pcb.castShadow = true; pcb.receiveShadow = true;
   group.add(pcb);
   // yeşil klemens blokları
   [0.016, 0.002, -0.012].forEach((yy)=>{
     const t = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.009, 0.009), greenMat);
-    t.position.set(0.000, yy, 0.030); group.add(t);
+    t.position.set(-0.020, yy, 0.0435); group.add(t);
   });
   // USB konektör (gümüş)
   const usb = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.008, 0.005), steelMat);
-  usb.position.set(-0.030, 0.014, 0.030); group.add(usb);
+  usb.position.set(-0.030, 0.018, 0.0435); group.add(usb);
   // header pinler
   const hdr = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.006, 0.007), blackPl);
-  hdr.position.set(-0.030, -0.014, 0.031); group.add(hdr);
+  hdr.position.set(-0.030, -0.018, 0.0440); group.add(hdr);
   // kondansatör
   const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.004,0.004,0.009,14),
                              new THREE.MeshStandardMaterial({color:0x2a2f38, roughness:0.5, metalness:0.6}));
-  cap.position.set(-0.008, 0.018, 0.030); group.add(cap);
+  cap.position.set(-0.008, 0.020, 0.0435); group.add(cap);
 
-  // --- Takım rengi LED şerit (arka kenar) ---
-  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.004, 0.0022), ledMat);
-  strip.position.set(-0.014, 0, 0.0525);
+  // --- Takım rengi LED şerit (arka kenar, yatay) ---
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.058, 0.0032), ledMat);
+  strip.position.set(-0.0455, 0, 0.0300);
   group.add(strip);
 
   // --- Yan aksan şeridi (takım rengi) ---
   [0.0345, -0.0345].forEach(y=>{
     const side = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.002, 0.014), accentMat);
-    side.position.set(-0.008, y, 0.012); group.add(side);
+    side.position.set(-0.014, y, 0.0208); group.add(side);
   });
 
-  // --- Vidalar ---
-  [[0.030,0.030],[-0.030,0.030],[0.030,-0.030],[-0.030,-0.030]].forEach(([x,y])=>{
+  // --- Vidalar (şasi üst yüzeyi) ---
+  [[-0.040,0.028],[-0.006,0.028],[-0.040,-0.028],[-0.006,-0.028]].forEach(([x,y])=>{
     const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.0022,0.0022,0.005,10), steelMat);
-    sc.position.set(x, y, 0.030); group.add(sc);
+    sc.position.set(x, y, 0.0385); group.add(sc);
   });
 
   // --- Tekerlekler: siyah lastik + gümüş disk jant ---
@@ -694,42 +720,42 @@ function makeRobot(colorHex){
       const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.0016,0.0016,0.0020,10), blackPl);
       hole.position.set(0.006, dy, 0.0); hole.rotation.x = Math.PI/2; g.add(hole);
     });
-    g.position.set(x, y, -0.008);
+    g.position.set(x, y, 0.000);       // aks yüksekliği = CoM hizası
     group.add(g);
     return g;
   }
-  const wl = wheel(-0.018, 0.038);
-  const wr = wheel(-0.018, -0.038);
+  const wl = wheel(-0.010, 0.036);
+  const wr = wheel(-0.010, -0.036);
 
-  // --- Ön E3Z sensör modülü (bıçağın üstünde) ---
+  // --- Ön E3Z sensör modülü (kamanın üstünde, ileri bakar) ---
   [0.021, -0.021].forEach(y=>{
     const b = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.010, 0.010), blackPl);
-    b.position.set(0.032, y, 0.013); b.castShadow = true; group.add(b);
+    b.position.set(0.030, y, 0.0218); b.castShadow = true; group.add(b);
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.0042,0.0042,0.0035,14), steelMat);
-    ring.rotation.z = Math.PI/2; ring.position.set(0.040, y, 0.013); group.add(ring);
+    ring.rotation.z = Math.PI/2; ring.position.set(0.038, y, 0.0218); group.add(ring);
     const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.0026,0.0026,0.0042,14), eyeMat);
-    eye.rotation.z = Math.PI/2; eye.position.set(0.0415, y, 0.013); group.add(eye);
+    eye.rotation.z = Math.PI/2; eye.position.set(0.0395, y, 0.0218); group.add(eye);
   });
 
-  // --- Alt QTR sensörler (kızıl IR) ---
-  [0.024, -0.024].forEach(y=>{
+  // --- Alt QTR sensörler (zemine bakan kızıl IR) ---
+  [0.026, -0.026].forEach(y=>{
     const q = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.010, 0.004), blackPl);
-    q.position.set(0.030, y, -0.020); group.add(q);
+    q.position.set(0.028, y, -0.0107); group.add(q);
     const ir = new THREE.Mesh(new THREE.SphereGeometry(0.0022,10,8), irMat);
-    ir.position.set(0.030, y, -0.0218); group.add(ir);
+    ir.position.set(0.028, y, -0.0122); group.add(ir);
   });
 
-  // --- Kızak (bilye) ---
+  // --- Kızak (alçak sürtünmeli bilye, 3. temas noktası) ---
   const skid = new THREE.Mesh(new THREE.SphereGeometry(0.006,18,14), steelMat);
-  skid.position.set(0.038, 0, -0.0245); skid.castShadow = true;
+  skid.position.set(0.030, 0, -0.0158); skid.castShadow = true;
   group.add(skid);
 
   // --- Zemine takım rengi ışık halkası ---
   const ringMat = new THREE.MeshBasicMaterial({color:colorHex, transparent:true, opacity:0.35,
                     side:THREE.DoubleSide, blending:THREE.AdditiveBlending, depthWrite:false});
+  // RingGeometry zaten XY düzleminde (sahne z-yukarı) → zemine yatıktır.
   const glow = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.063, 40), ringMat);
-  glow.rotation.x = Math.PI/2;
-  glow.position.z = -0.0293;
+  glow.position.z = -0.0222;
   group.add(glow);
 
   return {group, wheelL: wl, wheelR: wr};
@@ -1191,6 +1217,7 @@ function renderTeams(robots, s){
       <div class="row" style="margin-top:6px"><span>Sağ motor PWM</span><span class="mono">${pwm2}%</span></div>
       <div class="bar"><i style="width:${pwm2}%"></i></div>
       <div class="row" style="margin-top:6px"><span>Konum</span><span class="mono">${(r.position[0]).toFixed(2)}, ${(r.position[1]).toFixed(2)}</span></div>
+      <div class="row"><span>Çarpışma kuvveti</span><span class="mono ${(r.contact||0)>0.2?'hit':''}">${(r.contact||0).toFixed(1)} N ${(r.contact||0)>0.2?'⚡':''}</span></div>
     </div>`;
   }).join('');
 }

@@ -53,6 +53,20 @@ def main():
         print(("  ✅ " if cond else "  ❌ ") + name)
         ok = ok and cond
 
+    print("0) Oda durumu (açık mod gerekir)")
+    room = get("/api/room")
+    if not room.get("open"):
+        takeover = post("/api/room/create", {"name": "smoke-test"})
+        if takeover.get("ok"):
+            # Bayat odayı devral ve hemen kapat → açık mod
+            post("/api/room/leave", {}, takeover["token"])
+            room = get("/api/room")
+        if not room.get("open"):
+            print("  ⚠️  Aktif bir oda var ve hakemi bağlı. Testler açık mod ister;")
+            print("      panelden odadan ayrılın veya birkaç saniye sonra tekrar deneyin.")
+            return 2
+    check("panel açık modda", get("/api/room")["open"] is True)
+
     print("1) Servis erişimi")
     st = get("/api/state")
     check("durum alındı", "status" in st)

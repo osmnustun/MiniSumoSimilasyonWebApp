@@ -17,6 +17,7 @@ motoruna sahip, tarayıcı tabanlı mini sumo robot simülatörü.
 | 🤖 **İki robot yarışı** | İki öğrenci firmware'i aynı anda, hakem + kazanan tespiti |
 | 🌐 **Çok istemcili oda** | Hakem bir **oda kodu** oluşturur; iki öğrenci **farklı bilgisayarlardan** mavi/kırmızı tarafa katılır, herkes maçı kendi ekranında canlı izler |
 | 🔐 **Rol ve DIP kilidi** | Her oyuncu yalnızca **kendi** kodunu/DIP'ini yönetir; DIP switch'ler tur sırasında kilitlidir, **turlar arasında** açılır |
+| 🥋 **Gerçekçi sumo fiziği** | Alçak ağırlık merkezi, yere değen **çelik kama**, çekişe dayalı itişme, neredeyse tamamen esnek olmayan çarpışma → **ağır robot hafifi iter** |
 | 💻 **Tarayıcı paneli** | Canlı 3B görüntü, telemetri, kod editörü, firmware yükleme |
 | 🚀 **GPU/çok çekirdek** | RTX 4090 + 32 çekirdek; konteyner makinenin gücünü kullanır |
 
@@ -60,6 +61,9 @@ Sayfa açıldığında **lobi** ekranı gelir. Üç rol vardır:
 > Tek başınıza test etmek için **🎓 Oda Oluştur** deyip aynı odaya ikinci bir
 > pencereden farklı tarafı seçerek katılabilirsiniz. Oda oluşturulmadan önce panel
 > **açık mod**da (tek kullanıcı) çalışır.
+>
+> Hakemin bağlantısı koparsa (panel "KOPUK") oda **bayat** sayılır ve yeni bir
+> hakem oda oluşturabilir; böylece terk edilmiş bir oda panele kilitlenmez.
 
 ### 🌐 Çok istemcili maç (oda akışı)
 
@@ -172,7 +176,9 @@ MiniSumoSimulator/
 │   └── static/            # three.min.js, OrbitControls.js (yerel)
 ├── firmware/              # örnek .ino dosyaları
 ├── config/robot_config.yaml
-└── tests/                 # testler (smoke_test.py)
+└── tests/
+    ├── smoke_test.py      # uçtan uca API/rol/DIP testi (konteyner dışından)
+    └── physics_test.py    # fizik/çarpışma doğrulaması (konteyner içinde)
 ```
 
 ## API Uçları
@@ -199,6 +205,64 @@ MiniSumoSimulator/
 | POST | `/api/compile` | `{code}` derleme kontrolü |
 | GET/POST | `/api/firmware` | Firmware listele / kaydet |
 | POST | `/api/upload` | `.ino` yükle |
+
+## Fizik / Çarpışma Modeli
+
+Simülasyon **Bullet** (PyBullet) darbe tabanlı çözücüsünü kullanır. Motor tarafında
+çarpışma tepkisi elle hesaplanmaz; sonuç, gövde malzemeleri + kütle + çözücü
+ayarlarından çıkar. Tüm parametreler `sim/urdf/mini_sumo_bot.urdf` ve
+`sim/sim_engine.py` başındaki sabitlerde tanımlıdır.
+
+### Robotun fiziği
+
+| Parametre | Değer | Neden |
+|---|---|---|
+| Ağırlık merkezi (CoM) | Yerden **~21 mm** (tekerlek aksı hizası) | Devrilmeye karşı çok dirençli |
+| CoM konumu | Aksın **10 mm önünde** | Ağırlığın **%70'i tahrikli tekerleklerde** (çekiş), %30'u kızakta |
+| Kütle | 100–700 g (panelden), **toplam kütle tam eşit** (gövde dışı linkler düşülür) | Ölçek gerçek |
+| Atalet | Kütleyle **orantılı ölçeklenir** | Ağır robot dönmeye de dirençli |
+| Zemin sürtünmesi | 0.9 | Dohyo yüzeyi |
+| Gövde sürtünme / geri sıçrama | 0.62 / **0.03** | Plastik-PCB gövde, neredeyse sönümlü |
+| Tekerlek sürtünmesi | **1.2** (yüksek çekiş) | İtme kuvvetinin gerçek sınırı |
+| Tekerlek yuvarlanma direnci | 0.0015 | Sınırsız kaymaz |
+| Kızak | μ=0.06 + **anizotropik** `[0.25, 1.7, 1.7]` | İleri kolay kayar, yana direnir → düz gidiş |
+| **Kama (bıçak)** | μ=0.10 + `[0.55, 1.0, 1.0]`, 3.5 mm kalınlık | Rakibin altına kayar, kaldırır |
+| Ön kamа açısı | Yatayla ~**22°**, ön uç yerden **0.5 mm** | Gerçek mini sumo bıçağı |
+
+### Çarpışma nasıl hesaplanır
+
+1. **Temas şekilleri:** alçak+ yüksek gövde kutuları, 2 silindir tekerlek, küre kızak,
+   **eğik kama plakası** ve sensör kutuları. Robot–robot teması gerçekte kama/gövde
+   kutuları üzerinden olur.
+2. **Çözücü ayarları** (`_configure_physics`): `numSolverIterations=120`,
+   `enableConeFriction=1` (lastik benzeri sürtünme kuplajı), `useSplitImpulse=1`
+   (nüfuz düzeltmesi hıza sızmaz), `fixedTimeStep=1/240`.
+3. **İtme kuvveti:** tekerlekler hız kaynağı olarak sürülür; aktarılan kuvvet
+   **zemin tutunması (μ·N)** ile sınırlanır. Bu yüzden **ağır robot daha sert iter**
+   — gerçek sumodaki gibi.
+4. **Momentum:** geri sıçrama katsayısı 0.03 → kafa kafaya çarpışmada kinetik
+   enerjinin **>%95'i** sönümlenir (ölçülen: %99). Yani robotlar zıplamaz, iter.
+5. **Plastik kayıp** (`_update_contacts`): Bullet'in ideal çözümüne ek olarak,
+   temas anında yaklaşma hızının küçük bir oranı (6%) her iki robota zıt yönde
+   impuls olarak uygulanır → şasi/kama deformasyonunda kaybolan enerji modellenir.
+6. **Kama kaldırma:** kama gerçek bir collider olduğu için rakip doğal olarak öne
+   kalkar (ölçülen 2–5 mm); kalkan robotun tekerlek yükü azalır → **çekişini
+   kaybeder** ve itilmeye başlar.
+7. **Telemetri:** her robotun rakiple temas kuvveti (`contact`, N) panoda
+   "Çarpışma" satırında gösterilir.
+8. **Halka dışı** fizikten değil kuraldan gelir: taban merkezi `RING_RADIUS`'u
+   geçerse o robot turu kaybeder.
+
+### Doğrulama
+
+```bash
+docker compose exec -T sumo-sim python3 tests/physics_test.py
+```
+
+Duruş geometrisi, CoM, kütle eşitliği, yük dağılımı, yüksüz hız, çarpışma enerji
+kaybı, kütle etkisi, kama kaldırma ve halka dışı kararını ölçer.
+
+---
 
 ## Notlar
 

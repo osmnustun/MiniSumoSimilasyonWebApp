@@ -1,42 +1,132 @@
 <?xml version="1.0"?>
+<!--
+  Mini Sumo Robotu — fizik modeli
+  ==================================================================
+  EKSENLER: +x ileri, +y sol, +z yukarı. Zemin z = 0 (dünya).
+
+  ÖNEMLİ (PyBullet URDF semantiği): base_link'in çerçevesi, URDF'te
+  <inertial><origin> verildiğinde PyBullet tarafından KÜTLE MERKEZİNE
+  (CoM) taşınır ve tüm alt eklemler bu çerçeveye göre yorumlanır.
+  Bu yüzden burada <inertial><origin> KULLANILMAZ; bunun yerine tüm
+  geometri CoM merkezli koordinatlarda yazılır. Böylece:
+
+      base_link çerçevesi = robotun ağırlık merkezi (CoM)
+      spawn yüksekliği   = 0.0207 m (tekerlek aksının yerden yüksekliği)
+
+  Yani URDF'teki lokal z = (yerden yükseklik) − 0.0207.
+
+  Bu tasarım bilinçli olarak şunları sağlar:
+    * CoM alçak (aks hizasında, ~21 mm) → devrilmeye karşı çok dirençli
+    * CoM tekerlek aksının 10 mm önünde → ağırlığın ~%75'i tahrikli
+      tekerleklerde kalır (çekiş), kalan ~%25 kızakta (ön destek)
+    * Önde yere değen çelik KAMA (bıçak): rakibin altına girip kaldırır
+    * 2 tahrikli tekerlek + alçak sürtünmeli YÖNLÜ kızak (3 nokta temas)
+-->
 <robot name="mini_sumo_bot">
   <material name="body"><color rgba="0.15 0.16 0.20 1.0"/></material>
   <material name="top"><color rgba="0.10 0.55 0.95 1.0"/></material>
   <material name="wheel"><color rgba="0.05 0.05 0.05 1.0"/></material>
   <material name="sensor"><color rgba="0.85 0.85 0.20 1.0"/></material>
+  <material name="steel"><color rgba="0.78 0.80 0.84 1.0"/></material>
 
+  <!-- ==================== GÖVDE (CoM çerçevesi) ==================== -->
   <link name="base_link">
-    <collision><geometry><box size="0.09 0.07 0.025"/></geometry></collision>
-    <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><box size="0.09 0.07 0.025"/></geometry>
+    <!-- Alçak taban: yerden 5.5 mm yükseklikte başlar (yer payı) -->
+    <collision name="chassis_low">
+      <origin xyz="-0.003 0 -0.0067" rpy="0 0 0"/>
+      <geometry><box size="0.092 0.070 0.017"/></geometry>
+    </collision>
+    <!-- Yüksek arka bölüm: batarya + sürücü elektroniği hacmi -->
+    <collision name="chassis_high">
+      <origin xyz="-0.018 0 0.0198" rpy="0 0 0"/>
+      <geometry><box size="0.058 0.068 0.036"/></geometry>
+    </collision>
+
+    <visual name="body_v">
+      <origin xyz="-0.003 0 -0.0067" rpy="0 0 0"/>
+      <geometry><box size="0.092 0.070 0.017"/></geometry>
       <material name="body"/>
     </visual>
-    <visual>
-      <origin xyz="0 0 0.014" rpy="0 0 0"/>
-      <geometry><box size="0.088 0.068 0.004"/></geometry>
+    <visual name="deck_v">
+      <origin xyz="-0.018 0 0.0198" rpy="0 0 0"/>
+      <geometry><box size="0.058 0.068 0.036"/></geometry>
       <material name="top"/>
     </visual>
+
     <inertial>
-      <mass value="0.5"/>
-      <inertia ixx="0.00035" ixy="0" ixz="0" iyy="0.00045" iyz="0" izz="0.00065"/>
+      <!-- CoM = link çerçevesi (origin verilmiyor!) -->
+      <mass value="0.461"/>
+      <inertia ixx="0.00030" ixy="0" ixz="0" iyy="0.00044" iyz="0" izz="0.00053"/>
     </inertial>
   </link>
 
+  <!-- ==================== ÖN KAMA (BIÇAK) ==================== -->
+  <!-- Yatayla ~22° açılı ince çelik plaka. Ön ucu yerden 0.55 mm yüksekte,
+       arkası gövdeye gömülü. Rakibi kaldıran, çok kaygan rampa.
+       Anizotropik sürtünme: rampa yönünde daha da kaygan. -->
+  <link name="blade">
+    <collision name="blade_c">
+      <origin xyz="0 0 0" rpy="0 0.38 0"/>
+      <geometry><box size="0.026 0.092 0.0035"/></geometry>
+    </collision>
+    <visual name="blade_v">
+      <origin xyz="0 0 0" rpy="0 0.38 0"/>
+      <geometry><box size="0.026 0.092 0.0035"/></geometry>
+      <material name="steel"/>
+    </visual>
+    <inertial>
+      <mass value="0.024"/>
+      <inertia ixx="1.8e-6" ixy="0" ixz="0" iyy="1.6e-5" iyz="0" izz="1.6e-5"/>
+    </inertial>
+  </link>
+  <joint name="blade_joint" type="fixed">
+    <parent link="base_link"/><child link="blade"/>
+    <origin xyz="0.038 0 -0.0137" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ==================== TEKERLEKLER ==================== -->
   <link name="left_wheel">
     <collision><geometry><cylinder radius="0.021" length="0.014"/></geometry></collision>
     <visual><geometry><cylinder radius="0.021" length="0.014"/></geometry><material name="wheel"/></visual>
-    <inertial><mass value="0.001"/>
-      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial>
+    <inertial><mass value="0.004"/>
+      <inertia ixx="0.0004" ixy="0" ixz="0" iyy="0.0004" iyz="0" izz="0.0004"/></inertial>
   </link>
 
   <link name="right_wheel">
     <collision><geometry><cylinder radius="0.021" length="0.014"/></geometry></collision>
     <visual><geometry><cylinder radius="0.021" length="0.014"/></geometry><material name="wheel"/></visual>
-    <inertial><mass value="0.001"/>
-      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial>
+    <inertial><mass value="0.004"/>
+      <inertia ixx="0.0004" ixy="0" ixz="0" iyy="0.0004" iyz="0" izz="0.0004"/></inertial>
   </link>
 
+  <!-- Aks, CoM'in 10 mm gerisinde (CoM çerçevesinde x = -0.010) -->
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/><child link="left_wheel"/>
+    <origin xyz="-0.010 0.036 0.000" rpy="1.5708 0 0"/>
+    <axis xyz="0 0 -1"/>
+  </joint>
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/><child link="right_wheel"/>
+    <origin xyz="-0.010 -0.036 0.000" rpy="1.5708 0 0"/>
+    <axis xyz="0 0 -1"/>
+  </joint>
+
+  <!-- ==================== KIZAK (3. temas noktası) ==================== -->
+  <!-- Alçak sürtünmeli ve YÖNLÜ: ileri kolay kayar, yana direnç gösterir
+       → düz gidiş kararlılığı ve dönüş serbestliği. -->
+  <link name="skid">
+    <collision><geometry><sphere radius="0.006"/></geometry></collision>
+    <visual><geometry><sphere radius="0.006"/></geometry><material name="wheel"/></visual>
+    <inertial><mass value="0.004"/>
+      <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+  </link>
+  <joint name="skid_joint" type="fixed">
+    <parent link="base_link"/><child link="skid"/>
+    <origin xyz="0.030 0 -0.0158" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ==================== SENSÖRLER ==================== -->
+  <!-- QTR-1A: zemine bakan alt-ön köşe sensörleri -->
   <link name="qtr_left">
     <collision><geometry><box size="0.008 0.008 0.003"/></geometry></collision>
     <visual><geometry><box size="0.008 0.008 0.003"/></geometry><material name="sensor"/></visual>
@@ -47,53 +137,32 @@
     <visual><geometry><box size="0.008 0.008 0.003"/></geometry><material name="sensor"/></visual>
     <inertial><mass value="0.0005"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
   </link>
-  <link name="e3z_left">
-    <collision><geometry><box size="0.01 0.006 0.006"/></geometry></collision>
-    <visual><geometry><box size="0.01 0.006 0.006"/></geometry><material name="sensor"/></visual>
-    <inertial><mass value="0.0005"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
-  </link>
-  <link name="e3z_right">
-    <collision><geometry><box size="0.01 0.006 0.006"/></geometry></collision>
-    <visual><geometry><box size="0.01 0.006 0.006"/></geometry><material name="sensor"/></visual>
-    <inertial><mass value="0.0005"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
-  </link>
-
-  <link name="skid">
-    <collision><geometry><sphere radius="0.006"/></geometry></collision>
-    <visual><geometry><sphere radius="0.006"/></geometry><material name="wheel"/></visual>
-    <inertial><mass value="0.0005"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
-  </link>
-
-  <joint name="left_wheel_joint" type="continuous">
-    <parent link="base_link"/><child link="left_wheel"/>
-    <origin xyz="-0.018 0.036 -0.008" rpy="1.5708 0 0"/>
-    <axis xyz="0 0 -1"/>
-  </joint>
-  <joint name="right_wheel_joint" type="continuous">
-    <parent link="base_link"/><child link="right_wheel"/>
-    <origin xyz="-0.018 -0.036 -0.008" rpy="1.5708 0 0"/>
-    <axis xyz="0 0 -1"/>
-  </joint>
-
   <joint name="qtr_left_joint" type="fixed">
     <parent link="base_link"/><child link="qtr_left"/>
-    <origin xyz="0.030 0.028 -0.014" rpy="0 0 0"/>
+    <origin xyz="0.028 0.026 -0.0107" rpy="0 0 0"/>
   </joint>
   <joint name="qtr_right_joint" type="fixed">
     <parent link="base_link"/><child link="qtr_right"/>
-    <origin xyz="0.030 -0.028 -0.014" rpy="0 0 0"/>
+    <origin xyz="0.028 -0.026 -0.0107" rpy="0 0 0"/>
   </joint>
+
+  <!-- E3Z-D81: kamanın üstünde ileri bakan mesafe sensörleri -->
+  <link name="e3z_left">
+    <collision><geometry><box size="0.016 0.010 0.010"/></geometry></collision>
+    <visual><geometry><box size="0.016 0.010 0.010"/></geometry><material name="sensor"/></visual>
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+  </link>
+  <link name="e3z_right">
+    <collision><geometry><box size="0.016 0.010 0.010"/></geometry></collision>
+    <visual><geometry><box size="0.016 0.010 0.010"/></geometry><material name="sensor"/></visual>
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+  </link>
   <joint name="e3z_left_joint" type="fixed">
     <parent link="base_link"/><child link="e3z_left"/>
-    <origin xyz="0.047 0.022 0.004" rpy="0 0 0"/>
+    <origin xyz="0.030 0.021 0.0218" rpy="0 0 0"/>
   </joint>
   <joint name="e3z_right_joint" type="fixed">
     <parent link="base_link"/><child link="e3z_right"/>
-    <origin xyz="0.047 -0.022 0.004" rpy="0 0 0"/>
-  </joint>
-
-  <joint name="skid_joint" type="fixed">
-    <parent link="base_link"/><child link="skid"/>
-    <origin xyz="0.038 0 -0.0245" rpy="0 0 0"/>
+    <origin xyz="0.030 -0.021 0.0218" rpy="0 0 0"/>
   </joint>
 </robot>

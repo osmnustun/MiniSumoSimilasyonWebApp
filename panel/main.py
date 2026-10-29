@@ -147,7 +147,10 @@ async def room_create(cfg: RoomCreate,
                       x_sumo_token: Optional[str] = Header(None)):
     kind, role, player = _who(x_sumo_token)
     if not ROOM.open and kind != "host":
-        return _forbidden("Aktif bir oda var. Yeni oda oluşturmak için hakem olun.")
+        if ROOM.host_connected():
+            return _forbidden("Aktif bir oda var. Yeni oda oluşturmak için hakem olun.")
+        # Hakem kopuk → bayat oda: devral ve yeni oda aç
+        ROOM.close()
     info = ROOM.create(cfg.name)
     ENGINE.reset()                  # yeni oda = temiz saha
     return {"ok": True, **info, "room": ROOM.state(info["token"])}

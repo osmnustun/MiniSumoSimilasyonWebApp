@@ -22,9 +22,31 @@ RING_RADIUS = RING_DIAMETER / 2
 EDGE_WIDTH = 0.025             # 2.5 cm siyah kenar
 ROBOT_START_X = 0.10           # başlangıç çizgileri merkeze göre (resmi: ~10 cm)
 E3Z_RANGE = 0.30               # E3Z-D81 algılama mesafesi (m)
-WHEEL_RADIUS = 0.02
-MOTOR_MAX_RAD_S = 26.0         # 250 RPM
-MOTOR_MAX_FORCE = 0.6          # N (tork siniri)
+WHEEL_RADIUS = 0.021           # URDF'teki tekerlek yarıçapı
+
+# --- Motor modeli (jSumo Force Up 6V, 250 RPM) ---
+# Gerçek motor: durma torku ~0.6 kg·cm, yüksüz ~250 RPM. Tekerlek bir hız
+# kaynağı olarak sürülür (PWM ∝ hedef hız) → gerçek DC motorun
+# τ ∝ (ω_komut − ω) davranışı. Aktarılan kuvvet zemin tutunmasıyla sınırlanır.
+MOTOR_TORQUE_STALL = 0.060     # N·m — durma torku (~0.6 kg·cm)
+MOTOR_FORCE_STALL = MOTOR_TORQUE_STALL / WHEEL_RADIUS   # ≈ 2.86 N / tekerlek
+MOTOR_MAX_RAD_S = 26.0         # yüksüz açısal hız (250 RPM) → ~0.55 m/s
+MOTOR_FORCE_ARG = 0.10         # PyBullet motor kuvvet argümanı (≈ durma kuvveti)
+
+# Tekerlek lastiği sürtünmesi (dohyo zemininde gerçekçi tutunma).
+# İtme kuvveti bu tutunmayla sınırlanır → ağır robot daha sert iter.
+WHEEL_FRICTION = 1.2
+
+# URDF'te base_link çerçevesi = ağırlık merkezi (CoM) ve CoM tekerlek aksı
+# hizasındadır. Bu yüzden robotun doğduğu z = aks yüksekliği.
+ROBOT_SPAWN_Z = 0.0207
+MOTOR_MAX_RAD_S = 26.0         # 250 RPM → ~0.55 m/s
+
+# --- Temas / çarpışma modeli ---
+SOLVER_ITERATIONS = 120        # Bullet varsayılanı 50; hızlı itişmelerde kararlılık
+CONTACT_BREAKING_THRESHOLD = 0.0015
+CONTACT_LOSS = 0.06            # çarpışmada sönümlenen yaklaşma hızı oranı (plastik kayıp)
+CONTACT_MIN_SPEED = 0.03       # m/s — bunun altındaki yaklaşmalar "temas" sayılır
 
 URDF_PATH = os.path.join(os.path.dirname(__file__), "urdf", "mini_sumo_bot.urdf")
 
@@ -35,13 +57,18 @@ class RobotState:
         self.color = color
         self.x = x
         self.y = y
-        self.z = 0.03
+        self.z = ROBOT_SPAWN_Z
         self.yaw = yaw
         self.quat = [0, 0, 0, 1]
         self.wheel_l = 0.0
         self.wheel_r = 0.0
         self.body_id = None
         self.mass_g = 500
+        # Kütle/atalet muhasebesi (toplam kütle = paneldeki değer)
+        self.link_extra_mass = 0.0     # gövde dışı linklerin toplam kütlesi
+        self.base_mass0 = 0.5          # URDF'teki gövde kütlesi
+        self.base_inertia = None       # URDF gövde atalet diyagonali
+        self.contact = 0.0             # rakiple temas kuvveti (N)
         self.joint_left = None
         self.joint_right = None
         self.firmware: AVRFirmware = None
@@ -66,6 +93,7 @@ class RobotState:
             "pwm_right": self.pwm_right,
             "sensors": dict(self.sensors),
             "ring_out": self.ring_out,
+            "contact": round(self.contact, 2),
         }
 
 
@@ -123,7 +151,28 @@ class SimulationEngine:
             self.client = p.connect(p.DIRECT)
             p.setGravity(0, 0, -9.81)
             p.setTimeStep(self.dt)
+            self._configure_physics()
             self._build_world()
+
+    def _configure_physics(self):
+        """Temas çözümünü gerçekçileştiren Bullet parametreleri.
+
+        * Yüksek çözücü iterasyonu → hızlı itişmelerde kararlı, az sızan temas
+        * Koni (cone) sürtünmesi → lastik benzeri, yanal/boyuna sürtünme kuplajı
+        * Split impulse → nüfuz (penetration) düzeltmesi hıza sızmaz
+        """
+        for kw in (
+            dict(fixedTimeStep=self.dt),
+            dict(numSolverIterations=SOLVER_ITERATIONS),
+            dict(contactBreakingThreshold=CONTACT_BREAKING_THRESHOLD),
+            dict(enableConeFriction=1),
+            dict(useSplitImpulse=1, splitImpulsePenetrationThreshold=-0.002),
+            dict(deterministicOverlappingPairs=1),
+        ):
+            try:
+                p.setPhysicsEngineParameter(**kw)
+            except Exception:
+                pass  # eski PyBullet sürümlerinde bazı anahtarlar yok
 
     def _build_world(self):
         # Zemin: siyah taban (tam cap) + beyaz ust kaplama (kenar bosluğu kadar küçük)
@@ -168,33 +217,69 @@ class SimulationEngine:
 
         robot.body_id = p.loadURDF(
             tmp.name,
-            basePosition=[robot.x, robot.y, 0.0295],
+            basePosition=[robot.x, robot.y, ROBOT_SPAWN_Z],
             baseOrientation=p.getQuaternionFromEuler([0, 0, robot.yaw]),
             useFixedBase=False,
         )
+
+        # --- Kütle/atalet referansları (URDF değerleri) ---
+        d0 = p.getDynamicsInfo(robot.body_id, -1)
+        robot.base_mass0 = d0[0] or 0.5
+        robot.base_inertia = list(d0[2])
+        # Gövde dışı linklerin (tekerlek, kızak, kama, sensör) toplam kütlesi;
+        # toplam kütle panelde ayarlanan değere tam eşitlenir.
+        robot.link_extra_mass = sum(
+            p.getDynamicsInfo(robot.body_id, j)[0]
+            for j in range(p.getNumJoints(robot.body_id))
+        )
         self._apply_mass(robot)
-        p.changeDynamics(robot.body_id, -1, lateralFriction=0.7, restitution=0.05)
-        # Tekerlek/kızak eklemlerini isimden bul (indeks sırasına güvenme)
+
+        # --- Gövde: PCB/plastik; neredeyse tamamen sönümlü çarpışma ---
+        p.changeDynamics(robot.body_id, -1, lateralFriction=0.62, restitution=0.03,
+                         rollingFriction=0.0, spinningFriction=0.0)
+
+        # --- Link bazlı malzeme: tekerlek (çekiş), kızak (yönlü), kama (kaygan) ---
         for j in range(p.getNumJoints(robot.body_id)):
             name = p.getJointInfo(robot.body_id, j)[12].decode()
             if name == "skid":
-                p.changeDynamics(robot.body_id, j, lateralFriction=0.02,
-                                 spinningFriction=0.0, rollingFriction=0.0)
+                # Yönlü kızak: ileri kolay kayar (0.25×), yana direnç (1.7×)
+                p.changeDynamics(robot.body_id, j, lateralFriction=0.06,
+                                 anisotropicFriction=[0.25, 1.7, 1.7],
+                                 spinningFriction=0.0, rollingFriction=0.0,
+                                 restitution=0.0)
+            elif name == "blade":
+                # Cilalı çelik kama: rakibin altına kayar, sürtünmesi çok düşük.
+                # Anizotropik: rampa yönünde (x) daha da kaygan → kaldırma kolay.
+                p.changeDynamics(robot.body_id, j, lateralFriction=0.10,
+                                 anisotropicFriction=[0.55, 1.0, 1.0],
+                                 restitution=0.02, rollingFriction=0.0,
+                                 spinningFriction=0.0)
             elif name == "left_wheel":
                 robot.joint_left = j
-                p.changeDynamics(robot.body_id, j, lateralFriction=1.4,
-                                 spinningFriction=0.0, rollingFriction=0.0)
+                p.changeDynamics(robot.body_id, j, lateralFriction=WHEEL_FRICTION,
+                                 rollingFriction=0.0015, spinningFriction=0.01)
             elif name == "right_wheel":
                 robot.joint_right = j
-                p.changeDynamics(robot.body_id, j, lateralFriction=1.4,
-                                 spinningFriction=0.0, rollingFriction=0.0)
+                p.changeDynamics(robot.body_id, j, lateralFriction=WHEEL_FRICTION,
+                                 rollingFriction=0.0015, spinningFriction=0.01)
         for j in (robot.joint_left, robot.joint_right):
             if j is not None:
                 p.setJointMotorControl2(robot.body_id, j, p.VELOCITY_CONTROL, 0, 0)
 
     def _apply_mass(self, robot: RobotState):
-        mass = robot.mass_g / 1000.0
-        p.changeDynamics(robot.body_id, -1, mass=mass)
+        """Toplam kütleyi paneldeki değere eşitle; ataleti orantılı ölçekle.
+
+        Ağır robot yalnızca daha zor itilmez, aynı zamanda dönmeye karşı da
+        daha dirençli olur (atalet kütleyle birlikte ölçeklenir).
+        """
+        total = robot.mass_g / 1000.0
+        base = max(0.05, total - robot.link_extra_mass)
+        scale = (base / robot.base_mass0) if robot.base_mass0 else 1.0
+        kwargs = {"mass": base}
+        if robot.base_inertia:
+            kwargs["localInertiaDiagonal"] = [max(1e-7, d * scale)
+                                              for d in robot.base_inertia]
+        p.changeDynamics(robot.body_id, -1, **kwargs)
 
     def set_weight(self, index, mass_g):
         with self.lock:
@@ -351,7 +436,7 @@ class SimulationEngine:
 
             if place is not None:
                 p.resetBasePositionAndOrientation(
-                    robot.body_id, [place[0], place[1], 0.0295],
+                    robot.body_id, [place[0], place[1], ROBOT_SPAWN_Z],
                     p.getQuaternionFromEuler([0, 0, place[2]]))
                 p.resetBaseVelocity(robot.body_id, [0, 0, 0], [0, 0, 0])
             if target is not None:
@@ -385,6 +470,8 @@ class SimulationEngine:
                 self._set_motors(robot, lv, rv)
 
             p.stepSimulation()
+            # Test hedefine çarpma kuvveti (eğitim modunda telemetri)
+            robot.contact = self._contact_force(robot.body_id, self.target_id)
 
             render_counter += 1
             with self.lock:
@@ -495,6 +582,8 @@ class SimulationEngine:
 
             p.stepSimulation()
             ticks += 1
+            # Çarpışma tepkisi: rakip temasını ölç + plastik kayıp uygula
+            self._update_contacts(robots)
 
             # --- kisa kilit: durum guncelle ---
             with self.lock:
@@ -553,18 +642,80 @@ class SimulationEngine:
         if robot.joint_left is not None:
             p.setJointMotorControl2(robot.body_id, robot.joint_left,
                                     p.VELOCITY_CONTROL, targetVelocity=left_rad_s,
-                                    force=MOTOR_MAX_FORCE)
+                                    force=MOTOR_FORCE_ARG)
         if robot.joint_right is not None:
             p.setJointMotorControl2(robot.body_id, robot.joint_right,
                                     p.VELOCITY_CONTROL, targetVelocity=right_rad_s,
-                                    force=MOTOR_MAX_FORCE)
+                                    force=MOTOR_FORCE_ARG)
+
+    # ------------------------------------------------------------------
+    # Çarpışma / temas modeli
+    # ------------------------------------------------------------------
+    def _contact_force(self, a_id, b_id):
+        """İki cisim arasındaki toplam temas normal kuvveti (N)."""
+        if a_id is None or b_id is None:
+            return 0.0
+        try:
+            pts = p.getContactPoints(bodyA=a_id, bodyB=b_id)
+        except Exception:
+            return 0.0
+        return float(sum(abs(cp[9]) for cp in pts))
+
+    def _update_contacts(self, robots):
+        """Rakip temasını ölç ve hafif *plastik* çarpışma kaybı uygula.
+
+        Bullet teması ideal (neredeyse elastik) çözer. Gerçek şasi/bıçak
+        çarpışmalarında enerjinin bir kısmı deformasyon, ses ve ısı olarak
+        kaybolur. Yaklaşma hızının küçük bir oranını (CONTACT_LOSS) her
+        iki robota zıt yönde impuls olarak uygulayarak bu kaybı modelleriz.
+        Temas kuvveti telemetri için `robot.contact` alanına yazılır.
+        """
+        for r in robots:
+            r.contact = 0.0
+        if len(robots) != 2:
+            return
+        a, b = robots
+        if a.body_id is None or b.body_id is None:
+            return
+        try:
+            pts = p.getContactPoints(bodyA=a.body_id, bodyB=b.body_id)
+        except Exception:
+            return
+        if not pts:
+            return
+
+        force = float(sum(abs(cp[9]) for cp in pts))
+        a.contact = force
+        b.contact = force
+
+        n = pts[0][7]                       # temas normali (B'den A'ya)
+        va = p.getBaseVelocity(a.body_id)[0]
+        vb = p.getBaseVelocity(b.body_id)[0]
+        vn = sum((vb[i] - va[i]) * n[i] for i in range(3))
+        if vn <= CONTACT_MIN_SPEED:         # yaklaşma yok (birlikte itiliyorlar)
+            return
+
+        ma = max(a.mass_g / 1000.0, 1e-3)
+        mb = max(b.mass_g / 1000.0, 1e-3)
+        # Yaklaşma hızını CONTACT_LOSS oranında söndüren impuls
+        j = CONTACT_LOSS * vn / (1.0 / ma + 1.0 / mb)
+        for r, sign in ((a, 1.0), (b, -1.0)):
+            f = [sign * j / self.dt * n[i] for i in range(3)]
+            try:
+                com = p.getDynamicsInfo(r.body_id, -1)[3]
+                pos, orn = p.getBasePositionAndOrientation(r.body_id)
+                com_world = p.multiplyTransforms(pos, orn, com, [0, 0, 0, 1])[0]
+                # Kuvveti tam CoM'a uygula → sahte tork oluşmaz
+                p.applyExternalForce(r.body_id, -1, f, com_world, p.WORLD_FRAME)
+            except Exception:
+                pass
 
     def _compute_sensors(self, robot):
         # QTR-1A: zemin rengi (beyaz=~950, siyah=~150)
         # Sensörler robotun ön-alt köşelerinde; konuma göre kenarı okurlar.
         cos_y = math.cos(robot.yaw)
         sin_y = math.sin(robot.yaw)
-        offsets = [(0.030, 0.028), (0.030, -0.028)]  # (ileri, yan) sol/sağ
+        offsets = [(0.028, 0.026), (0.028, -0.026)]  # (ileri, yan) sol/sağ — URDF ile aynı
         vals = []
         for (fx, fy) in offsets:
             wx = robot.x + fx * cos_y - fy * sin_y
@@ -640,7 +791,7 @@ class SimulationEngine:
         for r, (x, y, yaw) in zip(robots, poses):
             if r.body_id is not None:
                 p.resetBasePositionAndOrientation(
-                    r.body_id, [x, y, 0.0295],
+                    r.body_id, [x, y, ROBOT_SPAWN_Z],
                     p.getQuaternionFromEuler([0, 0, yaw]))
                 p.resetBaseVelocity(r.body_id, [0, 0, 0], [0, 0, 0])
             r.ring_out = False
